@@ -266,7 +266,7 @@ export const Quotes = () => {
                    <h1 className="text-2xl font-bold uppercase tracking-wide text-slate-900">{settings.name}</h1>
                    <div className="text-sm text-slate-600 mt-2 space-y-1">
                       <p>{settings.cnpj}</p>
-                      <p>{settings.address}</p>
+                      <p>{settings.address.street}, {settings.address.number} - {settings.address.neighborhood}, {settings.address.city}/{settings.address.state}</p>
                       <p>{settings.taxRegime}</p>
                    </div>
                 </div>
@@ -288,7 +288,7 @@ export const Quotes = () => {
                       return client ? (
                         <>
                            <p>{client.document}</p>
-                           <p>{client.address}</p>
+                           <p>{client.street}, {client.number} - {client.neighborhood}, {client.city}/{client.state}</p>
                            <p>{client.email} | {client.phone}</p>
                         </>
                       ) : null;

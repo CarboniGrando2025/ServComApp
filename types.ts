@@ -132,6 +132,7 @@ export interface Installment {
   paidAmount: number;
   paymentDate?: string;
   category?: string; // Useful for payables categorization
+  documentNumber?: string; // For manual payables or linked invoice number
 }
 
 export interface FinancialRecord {

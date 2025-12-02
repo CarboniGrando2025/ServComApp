@@ -24,15 +24,21 @@ interface AppState {
   addBankAccount: (account: BankAccount) => void;
   
   addSale: (sale: Sale) => void;
+  deleteSale: (saleId: string) => void;
+  updateSaleClient: (saleId: string, newClientId: string) => void;
+  
   addQuote: (quote: Quote) => void;
   updateQuoteStatus: (id: string, status: Quote['status']) => void;
   
   emitInvoice: (invoiceId: string, number: string) => void;
+  emitBatchInvoices: (invoiceIds: string[], number: string) => void;
   
   payInstallment: (installmentId: string, paidAmount: number, bankAccountId: string, date: string, treatAsDiscount?: boolean, treatExcessAsPrincipal?: boolean) => void;
+  reparcelReceivables: (oldInstallmentIds: string[], newInstallments: Installment[]) => void;
   
-  addPayable: (payable: Installment) => void;
+  addPayable: (payable: Installment, immediatePayment?: { bankAccountId: string, date: string }) => void;
   payPayable: (payableId: string, paidAmount: number, bankAccountId: string, date: string, treatAsDiscount?: boolean, treatExcessAsPrincipal?: boolean) => void;
+  reparcelPayables: (oldInstallmentIds: string[], newInstallments: Installment[]) => void;
   
   addFinancialRecord: (record: FinancialRecord) => void;
   addAppointment: (appointment: Appointment) => void;
@@ -213,7 +219,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         type: 'RECEITA',
         category: 'Vendas',
         relatedSaleId: sale.id,
-        bankAccountId: sale.bankAccountId // Should be provided for PIX/Debit
+        bankAccountId: sale.bankAccountId
       };
       newState.financialRecords = [record, ...state.financialRecords];
       
@@ -255,6 +261,81 @@ export const useAppStore = create<AppState>((set, get) => ({
     return newState;
   }),
 
+  deleteSale: (saleId) => set((state) => {
+    // 1. Identify related Installments (for financial record removal)
+    const relatedInstallments = state.accountsReceivable.filter(i => i.saleId === saleId);
+    const relatedInstallmentIds = relatedInstallments.map(i => i.id);
+
+    // 2. Filter Lists
+    return {
+      sales: state.sales.filter(s => s.id !== saleId),
+      invoices: state.invoices.filter(i => i.saleId !== saleId),
+      accountsReceivable: state.accountsReceivable.filter(i => i.saleId !== saleId),
+      financialRecords: state.financialRecords.filter(rec => {
+        const linkedToSale = rec.relatedSaleId === saleId;
+        const linkedToInstallment = rec.relatedInstallmentId && relatedInstallmentIds.includes(rec.relatedInstallmentId);
+        return !linkedToSale && !linkedToInstallment;
+      })
+    };
+  }),
+
+  updateSaleClient: (saleId, newClientId) => set(state => {
+    const client = state.clients.find(c => c.id === newClientId);
+    if (!client) return state;
+
+    const oldSale = state.sales.find(s => s.id === saleId);
+    if (!oldSale) return state;
+
+    const oldName = oldSale.clientName;
+    const newName = client.name;
+
+    const updatedSales = state.sales.map(s => 
+        s.id === saleId ? { ...s, clientId: newClientId, clientName: newName } : s
+    );
+
+    const updatedInvoices = state.invoices.map(i => 
+        i.saleId === saleId ? { ...i, clientName: newName } : i
+    );
+
+    const updatedReceivables = state.accountsReceivable.map(i => {
+        if (i.saleId === saleId) {
+            let newDesc = i.description;
+            if (newDesc.includes(oldName)) {
+                newDesc = newDesc.replace(oldName, newName);
+            } else {
+                 newDesc = `${newDesc} - ${newName}`;
+            }
+            return { ...i, description: newDesc };
+        }
+        return i;
+    });
+
+    const relatedInstallmentIds = state.accountsReceivable
+        .filter(i => i.saleId === saleId)
+        .map(i => i.id);
+
+    const updatedRecords = state.financialRecords.map(r => {
+        const isRelatedSale = r.relatedSaleId === saleId;
+        const isRelatedInstallment = r.relatedInstallmentId && relatedInstallmentIds.includes(r.relatedInstallmentId);
+        
+        if (isRelatedSale || isRelatedInstallment) {
+            let newDesc = r.description;
+            if (newDesc.includes(oldName)) {
+                newDesc = newDesc.replace(oldName, newName);
+            }
+            return { ...r, description: newDesc };
+        }
+        return r;
+    });
+
+    return {
+        sales: updatedSales,
+        invoices: updatedInvoices,
+        accountsReceivable: updatedReceivables,
+        financialRecords: updatedRecords
+    };
+  }),
+
   addQuote: (quote) => set(state => ({ quotes: [quote, ...state.quotes] })),
   
   updateQuoteStatus: (id, status) => set(state => ({
@@ -262,25 +343,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   })),
 
   emitInvoice: (invoiceId, number) => set((state) => {
-    // 1. Identify Sale ID and Installments associated with this invoice
     const invoice = state.invoices.find(inv => inv.id === invoiceId);
     const saleId = invoice?.saleId;
     
-    // Find all installment IDs belonging to this sale
     const relatedInstallmentIds = state.accountsReceivable
         .filter(i => i.saleId === saleId)
         .map(i => i.id);
 
     return {
-      // 2. Update Invoice Status
       invoices: state.invoices.map(inv => 
         inv.id === invoiceId 
           ? { ...inv, status: InvoiceStatus.EMITTED, number, emissionDate: new Date().toISOString().split('T')[0] } 
           : inv
       ),
-      // 3. Update related Financial Records with the new Document Number
       financialRecords: state.financialRecords.map(rec => {
-        // Check if record is linked to sale directly OR via an installment of that sale
         const isRelatedSale = rec.relatedSaleId === saleId;
         const isRelatedInstallment = rec.relatedInstallmentId && relatedInstallmentIds.includes(rec.relatedInstallmentId);
         
@@ -292,11 +368,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
   }),
 
+  emitBatchInvoices: (invoiceIds, number) => set((state) => {
+    const invoicesToEmit = state.invoices.filter(inv => invoiceIds.includes(inv.id));
+    const saleIds = invoicesToEmit.map(inv => inv.saleId);
+    
+    const relatedInstallmentIds = state.accountsReceivable
+        .filter(i => i.saleId && saleIds.includes(i.saleId))
+        .map(i => i.id);
+        
+    const emissionDate = new Date().toISOString().split('T')[0];
+
+    return {
+      invoices: state.invoices.map(inv => 
+        invoiceIds.includes(inv.id) 
+          ? { ...inv, status: InvoiceStatus.EMITTED, number, emissionDate } 
+          : inv
+      ),
+      financialRecords: state.financialRecords.map(rec => {
+        const isRelatedSale = rec.relatedSaleId && saleIds.includes(rec.relatedSaleId);
+        const isRelatedInstallment = rec.relatedInstallmentId && relatedInstallmentIds.includes(rec.relatedInstallmentId);
+        
+        if (isRelatedSale || isRelatedInstallment) {
+            return { ...rec, documentNumber: number };
+        }
+        return rec;
+      })
+    };
+  }),
+
   payInstallment: (installmentId, paidAmount, bankAccountId, date, treatAsDiscount = false, treatExcessAsPrincipal = false) => set((state) => {
     const installment = state.accountsReceivable.find(i => i.id === installmentId);
     if (!installment) return state;
 
-    // Check for existing invoice document number
     let documentNumber: string | undefined = undefined;
     if (installment.saleId) {
         const invoice = state.invoices.find(inv => inv.saleId === installment.saleId && inv.status === InvoiceStatus.EMITTED);
@@ -311,36 +414,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     let status = InstallmentStatus.PAID;
 
     const newRecords: FinancialRecord[] = [];
-
-    // Determine how to record the principal payment
     let principalPaymentAmount = paidAmount;
 
     if (diff > 0.01) {
-      // Overpayment
       if (treatExcessAsPrincipal) {
-        // Update the installment amount to reflect the higher value
         finalInstallmentAmount = installment.amount + diff;
-        // Principal payment is the full paid amount
         principalPaymentAmount = paidAmount;
       } else {
-        // Treat as Interest: Principal payment is limited to remaining balance
         principalPaymentAmount = remainingBeforePay;
-        // Don't increase paidAmount beyond the original amount (conceptually)
-        // But for tracking "paidAmount" usually sums everything. 
-        // Let's cap paidAmount at original amount if treating as interest to keep "amount == paidAmount" for clean history
         finalPaidAmount = installment.amount; 
       }
     } else if (diff < -0.01) {
-       // Underpayment
        if (treatAsDiscount) {
          status = InstallmentStatus.PAID;
+         principalPaymentAmount = remainingBeforePay;
        } else {
          status = InstallmentStatus.PARTIAL;
+         principalPaymentAmount = paidAmount;
        }
-       principalPaymentAmount = paidAmount;
     }
 
-    // 1. Base Receipt Record
     newRecords.push({
       id: generateId(),
       date,
@@ -350,12 +443,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       category: 'Recebimento de Cliente',
       bankAccountId,
       relatedInstallmentId: installmentId,
-      documentNumber // Include found document number
+      documentNumber
     });
 
-    // 2. Handle Diff Records
     if (diff > 0.01 && !treatExcessAsPrincipal) {
-       // Interest Record
        newRecords.push({
         id: generateId(),
         date,
@@ -368,7 +459,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         documentNumber
       });
     } else if (diff < -0.01 && treatAsDiscount) {
-       // Discount Record
        newRecords.push({
         id: generateId(),
         date,
@@ -377,7 +467,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         type: 'DESPESA',
         category: 'Descontos Concedidos',
         relatedInstallmentId: installmentId,
-        documentNumber
+        documentNumber,
+        bankAccountId
       });
     }
 
@@ -397,9 +488,42 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
   }),
 
-  addPayable: (payable) => set(state => ({
-    accountsPayable: [payable, ...state.accountsPayable]
+  reparcelReceivables: (oldInstallmentIds, newInstallments) => set(state => ({
+     accountsReceivable: [
+         ...state.accountsReceivable.filter(i => !oldInstallmentIds.includes(i.id)),
+         ...newInstallments
+     ]
   })),
+
+  addPayable: (payable, immediatePayment) => set(state => {
+      let finalPayable = { ...payable };
+      let newFinancialRecord: FinancialRecord | null = null;
+
+      if (immediatePayment) {
+          finalPayable.status = InstallmentStatus.PAID;
+          finalPayable.paidAmount = payable.amount;
+          finalPayable.paymentDate = immediatePayment.date;
+          
+          newFinancialRecord = {
+            id: generateId(),
+            date: immediatePayment.date,
+            description: `Pagamento: ${payable.description}`,
+            amount: payable.amount,
+            type: 'DESPESA',
+            category: payable.category || 'Despesa Operacional',
+            bankAccountId: immediatePayment.bankAccountId,
+            relatedInstallmentId: payable.id,
+            documentNumber: payable.documentNumber
+          };
+      }
+
+      return {
+        accountsPayable: [finalPayable, ...state.accountsPayable],
+        financialRecords: newFinancialRecord 
+            ? [newFinancialRecord, ...state.financialRecords] 
+            : state.financialRecords
+      };
+  }),
 
   payPayable: (payableId, paidAmount, bankAccountId, date, treatAsDiscount = false, treatExcessAsPrincipal = false) => set(state => {
     const payable = state.accountsPayable.find(p => p.id === payableId);
@@ -413,31 +537,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     let status = InstallmentStatus.PAID;
 
     const newRecords: FinancialRecord[] = [];
-
-    // Determine how to record the principal payment
     let principalPaymentAmount = paidAmount;
 
     if (diff > 0.01) {
-      // Overpayment
       if (treatExcessAsPrincipal) {
         finalPayableAmount = payable.amount + diff;
         principalPaymentAmount = paidAmount;
       } else {
-        // Interest: Cap principal payment
         principalPaymentAmount = remainingBeforePay;
         finalPaidAmount = payable.amount;
       }
     } else if (diff < -0.01) {
-       // Underpayment
        if (treatAsDiscount) {
          status = InstallmentStatus.PAID;
+         principalPaymentAmount = remainingBeforePay;
        } else {
          status = InstallmentStatus.PARTIAL;
+         principalPaymentAmount = paidAmount;
        }
-       principalPaymentAmount = paidAmount;
     }
 
-    // 1. Base Payment Record
     newRecords.push({
       id: generateId(),
       date,
@@ -446,12 +565,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       type: 'DESPESA',
       category: payable.category || 'Despesa Operacional',
       bankAccountId,
-      relatedInstallmentId: payableId
+      relatedInstallmentId: payableId,
+      documentNumber: payable.documentNumber
     });
 
-    // 2. Handle Diff Records
     if (diff > 0.01 && !treatExcessAsPrincipal) {
-       // Interest Paid Record
        newRecords.push({
         id: generateId(),
         date,
@@ -460,10 +578,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         type: 'DESPESA',
         category: 'Juros Pagos',
         bankAccountId,
-        relatedInstallmentId: payableId
+        relatedInstallmentId: payableId,
+        documentNumber: payable.documentNumber
       }); 
     } else if (diff < -0.01 && treatAsDiscount) {
-        // Discount Received Record
         newRecords.push({
          id: generateId(),
          date,
@@ -471,7 +589,9 @@ export const useAppStore = create<AppState>((set, get) => ({
          amount: Math.abs(diff),
          type: 'RECEITA',
          category: 'Descontos Obtidos',
-         relatedInstallmentId: payableId
+         relatedInstallmentId: payableId,
+         bankAccountId,
+         documentNumber: payable.documentNumber
        });
      }
 
@@ -490,6 +610,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       financialRecords: [...newRecords, ...state.financialRecords]
     };
   }),
+
+  reparcelPayables: (oldInstallmentIds, newInstallments) => set(state => ({
+    accountsPayable: [
+        ...state.accountsPayable.filter(i => !oldInstallmentIds.includes(i.id)),
+        ...newInstallments
+    ]
+  })),
 
   addFinancialRecord: (record) => set(state => ({
     financialRecords: [record, ...state.financialRecords]

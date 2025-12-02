@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useAppStore } from '../store';
-import { Download, ChevronDown, ChevronUp, AlertCircle, Wallet, Search, Calendar, Filter } from 'lucide-react';
+import { Download, ChevronDown, ChevronUp, Wallet, Search } from 'lucide-react';
 
 export const Statement = () => {
   const { financialRecords, bankAccounts, sales, accountsReceivable } = useAppStore();
@@ -56,17 +56,10 @@ export const Statement = () => {
 
   // Calculate Balance based on filtered records
   const totalBalance = useMemo(() => {
-    // Note: This balance is the sum of the *visible* records in the period.
-    // If you want "Current Account Balance", that is stored in `bankAccounts`.
-    // If you want "Period Balance", this is correct.
     return filteredRecords.reduce((acc, rec) => {
       return rec.type === 'RECEITA' ? acc + rec.amount : acc - rec.amount;
     }, 0);
   }, [filteredRecords]);
-
-  // Total absolute balance (All time from accounts)
-  const absoluteBalance = bankAccounts.reduce((acc, b) => acc + b.initialBalance, 0) + 
-      financialRecords.filter(r => !!r.bankAccountId).reduce((acc, rec) => rec.type === 'RECEITA' ? acc + rec.amount : acc - rec.amount, 0);
 
   const getPaymentMethodLabel = (rec: any) => {
      if (rec.relatedSaleId) {
@@ -98,18 +91,6 @@ export const Statement = () => {
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Extrato Financeiro</h1>
             <p className="text-slate-500">Fluxo de caixa realizado.</p>
-          </div>
-          
-          <div className="bg-white px-6 py-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4 w-full md:w-auto">
-             <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
-                <Wallet size={24} />
-             </div>
-             <div>
-                <p className="text-xs text-slate-500 font-bold uppercase">Saldo Atual (Total)</p>
-                <p className={`text-xl font-bold ${absoluteBalance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
-                   R$ {absoluteBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-             </div>
           </div>
        </div>
        

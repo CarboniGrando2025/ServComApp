@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { PaymentMethod, Sale, SaleItem, Quote } from '../types';
-import { Plus, Trash2, Search, FileText, ShoppingCart, User, CreditCard, ChevronRight, CheckCircle, Download, X, AlertCircle, Minus, Printer, MapPin, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Search, FileText, ShoppingCart, User, CreditCard, ChevronRight, CheckCircle, Download, X, AlertCircle, Minus, Printer, MapPin, AlertTriangle, UserPen } from 'lucide-react';
 
 export const Sales = () => {
-  const { clients, services, bankAccounts, addSale, sales, quotes, updateQuoteStatus, settings } = useAppStore();
+  const { clients, services, bankAccounts, addSale, deleteSale, updateSaleClient, sales, quotes, updateQuoteStatus, settings } = useAppStore();
   const [view, setView] = useState<'list' | 'new'>('list');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -12,6 +12,13 @@ export const Sales = () => {
   const [lastSale, setLastSale] = useState<Sale | null>(null); // Track last sale for success modal
   const [importedQuoteId, setImportedQuoteId] = useState<string | null>(null);
   const [printReceiptSale, setPrintReceiptSale] = useState<Sale | null>(null); // For printing receipt
+  
+  // Delete Modal State
+  const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
+
+  // Edit Client Modal State
+  const [editingClientSaleId, setEditingClientSaleId] = useState<string | null>(null);
+  const [newClientId, setNewClientId] = useState('');
 
   // Form State
   const [clientId, setClientId] = useState('');
@@ -86,23 +93,7 @@ export const Sales = () => {
     setSelectedServices(newServices);
   };
 
-  // Logic to handle "Editing Total" -> Reverse calculate discount
   const handleTotalChange = (newTotal: number) => {
-    // Note: When manually changing total, we assume this is the Desired Final Amount.
-    // Logic: Subtotal - Discount - Retentions(if deducted) = NewTotal
-    // Discount = Subtotal - Retentions(if deducted) - NewTotal
-    
-    // We need to know current retentions.
-    // Retentions are percentage based. If discount changes, does retention change?
-    // Usually Retentions are on GROSS or (GROSS-UNCONDITIONAL DISCOUNT).
-    // Let's assume Retentions are based on (Subtotal - Discount). This makes it circular.
-    // SIMPLIFICATION: We will calculate Retentions based on the effective price of items.
-    // To handle manual total override properly with retentions is complex.
-    // Let's simplified: Discount = Subtotal - NewTotal (ignoring retention toggle for the manual input calc for now, 
-    // or assume user is entering the "Pre-Retention" value if retentions exist).
-    
-    // Actually, to avoid circular logic confusion for the user:
-    // Manual Total Editing sets the "Total After Discount".
     const newDiscount = subtotal - newTotal;
     setDiscount(newDiscount);
   };
@@ -120,24 +111,17 @@ export const Sales = () => {
 
   const calculateRetentionsValue = () => {
       let totalRet = 0;
-      // Tax Base: We will use the proportional discount logic or simply (ItemPrice * Qty).
-      // Standard practice: Retentions apply to the service value.
-      // If there is a global discount, it usually reduces the tax base.
-      // Ratio of Final/Subtotal
       const ratio = subtotal > 0 ? (Math.max(0, subtotal - discount) / subtotal) : 1;
 
       selectedServices.forEach(item => {
           const service = services.find(s => s.id === item.serviceId);
           if (service) {
-              // Base for this item (considering global discount distribution)
               const itemBase = (item.price * item.quantity) * ratio;
-              
               const pis = itemBase * ((service.pis || 0) / 100);
               const cofins = itemBase * ((service.cofins || 0) / 100);
               const csll = itemBase * ((service.csll || 0) / 100);
               const ir = itemBase * ((service.ir || 0) / 100);
               const inss = itemBase * ((service.inss || 0) / 100);
-              
               totalRet += (pis + cofins + csll + ir + inss);
           }
       });
@@ -150,17 +134,13 @@ export const Sales = () => {
         alert("Adicione pelo menos um serviço.");
         return;
     }
-    
-    // Calculate Retentions before showing modal
     const retAmount = calculateRetentionsValue();
     setCalculatedRetentions(retAmount);
-    setDeductRetentions(true); // Default to YES
-
+    setDeductRetentions(true);
     setShowConfirmation(true);
   };
 
   const handleFinalizeSale = () => {
-    // If no client selected, use "Unknown"
     let finalClientId = clientId;
     let finalClientName = 'CLIENTE NÃO INFORMADO';
 
@@ -179,7 +159,7 @@ export const Sales = () => {
       items: selectedServices,
       totalAmount: subtotal,
       discount,
-      finalAmount: totalFinal, // Uses deductRetentions logic
+      finalAmount: totalFinal,
       paymentMethod,
       installmentsCount: installments,
       bankAccountId: bankAccount,
@@ -194,11 +174,10 @@ export const Sales = () => {
       updateQuoteStatus(importedQuoteId, 'Finalizado');
     }
 
-    setLastSale(newSale); // Store for success modal
+    setLastSale(newSale); 
     setShowConfirmation(false);
-    setShowSuccessModal(true); // Show success instead of going back immediately
+    setShowSuccessModal(true); 
     
-    // Reset Form
     setSelectedServices([]);
     setClientId('');
     setClientSearch('');
@@ -216,7 +195,28 @@ export const Sales = () => {
     setLastSale(null);
   }
 
-  // Close client dropdown when clicking outside (simple effect)
+  const handleConfirmDelete = () => {
+    if(saleToDelete) {
+        deleteSale(saleToDelete.id);
+        setSaleToDelete(null);
+    }
+  };
+
+  // Edit Client Logic
+  const handleOpenEditClient = (sale: Sale) => {
+      setEditingClientSaleId(sale.id);
+      setNewClientId(sale.clientId || '');
+  };
+
+  const handleSaveClientChange = () => {
+      if (editingClientSaleId && newClientId) {
+          updateSaleClient(editingClientSaleId, newClientId);
+          setEditingClientSaleId(null);
+          setNewClientId('');
+      }
+  };
+
+  // Close client dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = () => setShowClientList(false);
     document.addEventListener('click', handleClickOutside);
@@ -566,6 +566,7 @@ export const Sales = () => {
                   <th className="px-6 py-4 text-right">Valor Total</th>
                   <th className="px-6 py-4 text-center">Nota</th>
                   <th className="px-6 py-4 text-center">Recibo</th>
+                  <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -602,11 +603,27 @@ export const Sales = () => {
                          <Printer size={18}/>
                       </button>
                     </td>
+                     <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                      <button
+                         onClick={() => handleOpenEditClient(sale)}
+                         className="text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-50 rounded transition-colors"
+                         title="Trocar Cliente"
+                      >
+                         <UserPen size={18} />
+                      </button>
+                      <button 
+                         onClick={() => setSaleToDelete(sale)}
+                         className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors"
+                         title="Excluir Venda"
+                      >
+                         <Trash2 size={18}/>
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {sales.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">Nenhuma venda registrada ainda.</td>
+                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400">Nenhuma venda registrada ainda.</td>
                   </tr>
                 )}
               </tbody>
@@ -859,6 +876,96 @@ export const Sales = () => {
         </div>
       )}
 
+      {/* DANGER DELETE MODAL */}
+      {saleToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+              <div className="bg-red-50 p-6 flex flex-col items-center text-center border-b border-red-100">
+                 <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                    <AlertTriangle size={32} />
+                 </div>
+                 <h3 className="text-xl font-bold text-red-700 mb-2">Excluir Venda?</h3>
+                 <p className="text-sm text-red-600 font-medium">Esta ação é irreversível.</p>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                 <div className="text-sm text-slate-600 space-y-2 bg-slate-50 p-4 rounded border border-slate-100">
+                    <p>Ao confirmar, o sistema irá excluir permanentemente:</p>
+                    <ul className="list-disc pl-5 space-y-1 font-medium text-slate-700">
+                        <li>A venda e seus itens.</li>
+                        <li>A nota fiscal (pendente ou emitida).</li>
+                        <li>Todas as parcelas do Contas a Receber (pagas ou não).</li>
+                        <li>Todos os lançamentos financeiros (caixa) vinculados.</li>
+                    </ul>
+                 </div>
+                 
+                 <div className="flex gap-3 pt-2">
+                    <button 
+                        onClick={() => setSaleToDelete(null)}
+                        className="flex-1 px-4 py-3 bg-white border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleConfirmDelete}
+                        className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-sm"
+                    >
+                        Sim, Excluir Tudo
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* EDIT CLIENT MODAL */}
+      {editingClientSaleId && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <UserPen size={20} className="text-blue-500"/> Alterar Cliente da Venda
+                    </h3>
+                    <button onClick={() => setEditingClientSaleId(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <p className="text-sm text-slate-600">
+                        Selecione o novo cliente para esta venda. Esta alteração será refletida no contas a receber, notas fiscais e extrato.
+                    </p>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Novo Cliente</label>
+                        <select 
+                            className="w-full border p-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                            value={newClientId}
+                            onChange={(e) => setNewClientId(e.target.value)}
+                        >
+                            <option value="">Selecione...</option>
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-4">
+                        <button 
+                            onClick={() => setEditingClientSaleId(null)}
+                            className="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            onClick={handleSaveClientChange}
+                            disabled={!newClientId}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm disabled:opacity-50"
+                        >
+                            Salvar Alteração
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* PRINT RECEIPT OVERLAY */}
       {printReceiptSale && (
         <div className="fixed inset-0 z-50 bg-slate-800/90 overflow-auto flex items-start justify-center p-4">
@@ -880,7 +987,7 @@ export const Sales = () => {
                 <div className="text-center border-b border-dashed border-slate-400 pb-4 mb-4">
                    <h2 className="font-bold text-lg uppercase">{settings.name}</h2>
                    <p className="text-xs">{settings.cnpj}</p>
-                   <p className="text-xs">{settings.address}</p>
+                   <p className="text-xs">{settings.address.street}, {settings.address.number} - {settings.address.neighborhood}, {settings.address.city}/{settings.address.state}</p>
                    <p className="mt-2 font-bold">RECIBO DE VENDA #{printReceiptSale.id.substr(0,4)}</p>
                    <p className="text-xs">{new Date(printReceiptSale.date).toLocaleString('pt-BR')}</p>
                 </div>

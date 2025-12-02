@@ -1,33 +1,67 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { PaymentMethod, Sale, SaleItem, Quote } from '../types';
-import { Plus, Trash2, Search, FileText, ShoppingCart, User, CreditCard, ChevronRight, CheckCircle, FileInput, Download, X, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Search, FileText, ShoppingCart, User, CreditCard, ChevronRight, CheckCircle, Download, X, AlertCircle, Minus, Printer } from 'lucide-react';
 
 export const Sales = () => {
-  const { clients, services, bankAccounts, addSale, sales, quotes, updateQuoteStatus } = useAppStore();
+  const { clients, services, bankAccounts, addSale, sales, quotes, updateQuoteStatus, settings } = useAppStore();
   const [view, setView] = useState<'list' | 'new'>('list');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // New Success Modal
+  const [lastSale, setLastSale] = useState<Sale | null>(null); // Track last sale for success modal
   const [importedQuoteId, setImportedQuoteId] = useState<string | null>(null);
+  const [printReceiptSale, setPrintReceiptSale] = useState<Sale | null>(null); // For printing receipt
 
   // Form State
   const [clientId, setClientId] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientList, setShowClientList] = useState(false);
+
   const [selectedServices, setSelectedServices] = useState<SaleItem[]>([]);
+  const [serviceSearch, setServiceSearch] = useState('');
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [installments, setInstallments] = useState(1);
   const [bankAccount, setBankAccount] = useState('');
   const [discount, setDiscount] = useState(0);
 
+  // Computed Subtotal
+  const subtotal = useMemo(() => {
+    return selectedServices.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  }, [selectedServices]);
+
+  // Computed Total (Final)
+  const totalFinal = Math.max(0, subtotal - discount);
+
+  // Filtered Lists
+  const filteredServices = services.filter(s => 
+    s.name.toLowerCase().includes(serviceSearch.toLowerCase())
+  );
+
+  const filteredClients = clients.filter(c => 
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
+    c.document.includes(clientSearch)
+  );
+
   // Add service to cart
   const handleAddService = (serviceId: string) => {
     const service = services.find(s => s.id === serviceId);
     if (service) {
-      setSelectedServices([...selectedServices, {
-        serviceId: service.id,
-        serviceName: service.name,
-        price: service.price,
-        quantity: 1
-      }]);
+      // Check if already in cart
+      const existingIndex = selectedServices.findIndex(i => i.serviceId === serviceId);
+      
+      if (existingIndex >= 0) {
+        // Increment quantity
+        handleUpdateItem(existingIndex, 'quantity', selectedServices[existingIndex].quantity + 1);
+      } else {
+        setSelectedServices([...selectedServices, {
+          serviceId: service.id,
+          serviceName: service.name,
+          price: service.price,
+          quantity: 1
+        }]);
+      }
     }
   };
 
@@ -37,43 +71,62 @@ export const Sales = () => {
     setSelectedServices(newServices);
   };
 
-  const calculateTotal = () => {
-    const subtotal = selectedServices.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    return Math.max(0, subtotal - discount);
+  const handleUpdateItem = (index: number, field: keyof SaleItem, value: number) => {
+    const newServices = [...selectedServices];
+    if (field === 'quantity' && value < 1) return; // Prevent 0 quantity
+    newServices[index] = { ...newServices[index], [field]: value };
+    setSelectedServices(newServices);
+  };
+
+  // Logic to handle "Editing Total" -> Reverse calculate discount
+  const handleTotalChange = (newTotal: number) => {
+    // Total = Subtotal - Discount
+    // Discount = Subtotal - Total
+    const newDiscount = subtotal - newTotal;
+    setDiscount(newDiscount); // Allow negative discount (surcharge) if needed, or clamp?
   };
 
   const handleImportQuote = (quote: Quote) => {
     setClientId(quote.clientId);
-    // Deep copy items to avoid reference issues
+    const client = clients.find(c => c.id === quote.clientId);
+    setClientSearch(client ? client.name : '');
+    // Deep copy items
     setSelectedServices(quote.items.map(i => ({...i})));
     setDiscount(quote.discount);
     setImportedQuoteId(quote.id);
     setShowImportModal(false);
   };
 
-  // Triggered by the form submit
   const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId || selectedServices.length === 0) {
-        alert("Selecione um cliente e adicione pelo menos um serviço.");
+    if (selectedServices.length === 0) {
+        alert("Adicione pelo menos um serviço.");
         return;
     }
-    // Open Confirmation Modal
     setShowConfirmation(true);
   };
 
-  // Triggered by the confirmation modal
   const handleFinalizeSale = () => {
-    const client = clients.find(c => c.id === clientId);
+    // If no client selected, use "Unknown"
+    let finalClientId = clientId;
+    let finalClientName = 'CLIENTE NÃO INFORMADO';
+
+    if (clientId) {
+        const client = clients.find(c => c.id === clientId);
+        if (client) finalClientName = client.name;
+    } else if (clientSearch && !clientId) {
+         finalClientName = 'CLIENTE NÃO INFORMADO'; 
+    }
+
     const newSale: Sale = {
       id: Math.random().toString(36).substr(2, 9),
-      clientId,
-      clientName: client?.name || 'Cliente Desconhecido',
+      clientId: finalClientId,
+      clientName: finalClientName,
       date: new Date().toISOString(),
       items: selectedServices,
-      totalAmount: selectedServices.reduce((acc, item) => acc + item.price, 0),
+      totalAmount: subtotal,
       discount,
-      finalAmount: calculateTotal(),
+      finalAmount: totalFinal,
       paymentMethod,
       installmentsCount: installments,
       bankAccountId: bankAccount
@@ -81,23 +134,36 @@ export const Sales = () => {
 
     addSale(newSale);
     
-    // Mark quote as finalized if imported
     if (importedQuoteId) {
       updateQuoteStatus(importedQuoteId, 'Finalizado');
     }
 
-    // Reset UI
+    setLastSale(newSale); // Store for success modal
     setShowConfirmation(false);
-    setView('list');
+    setShowSuccessModal(true); // Show success instead of going back immediately
     
     // Reset Form
     setSelectedServices([]);
     setClientId('');
+    setClientSearch('');
     setDiscount(0);
     setInstallments(1);
     setPaymentMethod(PaymentMethod.CASH);
     setImportedQuoteId(null);
   };
+
+  const handleCloseSuccess = () => {
+    setShowSuccessModal(false);
+    setView('list');
+    setLastSale(null);
+  }
+
+  // Close client dropdown when clicking outside (simple effect)
+  useEffect(() => {
+    const handleClickOutside = () => setShowClientList(false);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -119,10 +185,9 @@ export const Sales = () => {
              <div className="flex items-center gap-2 text-sm text-slate-500">
                 <button onClick={() => setView('list')} className="hover:text-blue-600 hover:underline">Vendas</button>
                 <ChevronRight size={16} />
-                <span className="font-semibold text-slate-800">Nova Venda</span>
+                <span className="font-semibold text-slate-800">Nova Venda (POS)</span>
              </div>
              
-             {/* Import Quote Button */}
              <button 
                onClick={() => setShowImportModal(true)}
                className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 border border-blue-200 transition-colors"
@@ -133,180 +198,260 @@ export const Sales = () => {
 
           <form onSubmit={handlePreSubmit} className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full overflow-hidden">
             
-            {/* LEFT COLUMN: Services & Cart */}
-            <div className="lg:col-span-2 flex flex-col gap-4 bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-               <div className="p-4 bg-slate-50 border-b border-slate-100">
-                  <h2 className="font-bold text-slate-700 flex items-center gap-2">
-                    <ShoppingCart size={20} className="text-blue-600"/> 
-                    Itens da Venda
-                  </h2>
-               </div>
+            {/* LEFT COLUMN: Services Catalog & Cart */}
+            <div className="lg:col-span-2 flex flex-col bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                
-               <div className="p-4 space-y-4">
-                  {/* Service Selector */}
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <select 
-                        className="w-full border-slate-300 rounded-lg p-3 border bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                        onChange={(e) => {
-                          handleAddService(e.target.value);
-                          e.target.value = "";
-                        }}
-                      >
-                        <option value="">+ Adicionar Serviço...</option>
-                        {services.map(s => (
-                          <option key={s.id} value={s.id}>{s.name} - R$ {s.price.toFixed(2)}</option>
-                        ))}
-                      </select>
-                    </div>
+               {/* Search Bar */}
+               <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 text-slate-400" size={20} />
+                    <input 
+                      type="text" 
+                      placeholder="Pesquisar serviço para adicionar..." 
+                      className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={serviceSearch}
+                      onChange={e => setServiceSearch(e.target.value)}
+                      autoFocus
+                    />
                   </div>
                </div>
 
-               {/* Cart Table */}
-               <div className="flex-1 overflow-y-auto px-4 pb-4">
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm text-left">
-                      <thead className="bg-slate-50 text-slate-600 font-medium border-b">
-                        <tr>
-                          <th className="px-4 py-3">Serviço</th>
-                          <th className="px-4 py-3 w-32">Preço Unit.</th>
-                          <th className="px-4 py-3 w-20 text-center">Ação</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {selectedServices.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 font-medium text-slate-700">{item.serviceName}</td>
-                            <td className="px-4 py-3">R$ {item.price.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-center">
-                              <button type="button" onClick={() => handleRemoveService(idx)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors">
-                                <Trash2 size={18} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                        {selectedServices.length === 0 && (
-                          <tr>
-                            <td colSpan={3} className="px-4 py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                              <ShoppingCart size={32} className="opacity-20"/>
-                              Nenhum serviço selecionado
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+               <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                  
+                  {/* Service List (Catalog) */}
+                  <div className="lg:w-1/3 border-r border-slate-100 overflow-y-auto bg-slate-50">
+                    <div className="p-2 space-y-2">
+                       {filteredServices.map(s => (
+                         <button 
+                           key={s.id} 
+                           type="button"
+                           onClick={() => handleAddService(s.id)}
+                           className="w-full text-left p-3 bg-white hover:bg-blue-50 border border-slate-200 rounded-lg shadow-sm transition-all active:scale-95 group"
+                         >
+                            <div className="font-medium text-slate-700 group-hover:text-blue-700">{s.name}</div>
+                            <div className="text-sm font-bold text-slate-500 group-hover:text-blue-600">R$ {s.price.toFixed(2)}</div>
+                         </button>
+                       ))}
+                       {filteredServices.length === 0 && (
+                         <div className="p-4 text-center text-slate-400 text-sm">Nenhum serviço encontrado</div>
+                       )}
+                    </div>
                   </div>
-               </div>
-               
-               {/* Totals Section inside Left Column (Mobile only) or Bottom */}
-               <div className="p-4 bg-slate-50 border-t border-slate-100 lg:hidden">
-                  <div className="flex justify-between items-center text-lg font-bold">
-                    <span>Total</span>
-                    <span>R$ {calculateTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+
+                  {/* Cart Table */}
+                  <div className="lg:w-2/3 flex flex-col overflow-hidden bg-white">
+                      <div className="flex-1 overflow-y-auto p-0">
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-white text-slate-500 font-semibold border-b sticky top-0 z-10 shadow-sm">
+                            <tr>
+                              <th className="px-4 py-3">Item</th>
+                              <th className="px-2 py-3 w-32 text-center">Qtd</th>
+                              <th className="px-2 py-3 w-28 text-center">Preço Un.</th>
+                              <th className="px-4 py-3 w-24 text-right">Total</th>
+                              <th className="px-2 py-3 w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedServices.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50 group">
+                                <td className="px-4 py-3 font-medium text-slate-700">
+                                  {item.serviceName}
+                                </td>
+                                
+                                {/* Quantity Controls */}
+                                <td className="px-2 py-3">
+                                  <div className="flex items-center justify-center bg-slate-100 rounded-lg p-1 w-fit mx-auto">
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleUpdateItem(idx, 'quantity', item.quantity - 1)}
+                                      className="p-1 hover:bg-white rounded shadow-sm text-slate-600 disabled:opacity-50"
+                                      disabled={item.quantity <= 1}
+                                    >
+                                      <Minus size={14} />
+                                    </button>
+                                    <span className="w-8 text-center font-semibold text-slate-700">{item.quantity}</span>
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleUpdateItem(idx, 'quantity', item.quantity + 1)}
+                                      className="p-1 hover:bg-white rounded shadow-sm text-blue-600"
+                                    >
+                                      <Plus size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+
+                                {/* Editable Price */}
+                                <td className="px-2 py-3">
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-1.5 text-xs text-slate-400">R$</span>
+                                    <input 
+                                      type="number"
+                                      step="0.01"
+                                      className="w-full pl-6 pr-1 py-1 text-sm border border-slate-200 rounded text-center focus:ring-1 focus:ring-blue-500 outline-none"
+                                      value={item.price}
+                                      onChange={(e) => handleUpdateItem(idx, 'price', Number(e.target.value))}
+                                    />
+                                  </div>
+                                </td>
+
+                                <td className="px-4 py-3 text-right font-bold text-slate-700">
+                                  R$ {(item.price * item.quantity).toFixed(2)}
+                                </td>
+                                
+                                <td className="px-2 py-3 text-center">
+                                  <button type="button" onClick={() => handleRemoveService(idx)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {selectedServices.length === 0 && (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-20 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+                                  <div className="bg-slate-50 p-4 rounded-full">
+                                    <ShoppingCart size={40} className="opacity-20"/>
+                                  </div>
+                                  <p>Selecione serviços na lista ao lado</p>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                   </div>
                </div>
             </div>
 
-            {/* RIGHT COLUMN: Client & Payment (Checkout) */}
+            {/* RIGHT COLUMN: Checkout */}
             <div className="flex flex-col gap-4 bg-white rounded-xl shadow-sm border border-slate-100 overflow-y-auto">
                
                {/* Client Section */}
                <div className="p-6 border-b border-slate-100 space-y-4">
                   <h2 className="font-bold text-slate-700 flex items-center gap-2">
                     <User size={20} className="text-blue-600"/> 
-                    Cliente
+                    Cliente <span className="text-xs font-normal text-slate-400 ml-auto">(Opcional)</span>
                   </h2>
-                  <select 
-                    className="w-full border-slate-300 rounded-lg p-3 border bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    required
-                  >
-                    <option value="">Selecione o cliente...</option>
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 text-slate-400" size={18} />
+                    <input 
+                       type="text"
+                       placeholder="Buscar ou selecionar cliente..."
+                       className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       value={clientSearch}
+                       onChange={(e) => {
+                          setClientSearch(e.target.value);
+                          setClientId(''); // Reset ID if typing manual name
+                          setShowClientList(true);
+                       }}
+                       onFocus={() => setShowClientList(true)}
+                       onClick={(e) => e.stopPropagation()} // Prevent closing immediately
+                    />
+                    
+                    {/* Dropdown Results */}
+                    {showClientList && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        {filteredClients.length > 0 ? filteredClients.map(c => (
+                           <div 
+                             key={c.id} 
+                             className="p-3 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setClientId(c.id);
+                               setClientSearch(c.name);
+                               setShowClientList(false);
+                             }}
+                           >
+                             <div className="font-medium text-slate-800">{c.name}</div>
+                             <div className="text-xs text-slate-500">{c.document || 'Sem Documento'}</div>
+                           </div>
+                        )) : (
+                           <div className="p-3 text-slate-400 text-sm text-center">Nenhum cliente encontrado</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                </div>
 
-               {/* Payment Section */}
+               {/* Payment Details */}
                <div className="p-6 space-y-4 flex-1">
                   <h2 className="font-bold text-slate-700 flex items-center gap-2">
                     <CreditCard size={20} className="text-blue-600"/> 
                     Pagamento
                   </h2>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Forma de Pagamento</label>
-                    <select 
-                      className="w-full border-slate-300 rounded-lg p-2.5 border bg-white"
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                    >
-                      {Object.values(PaymentMethod).map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Logic: Installments vs Bank Account */}
-                  {(paymentMethod === PaymentMethod.CREDIT_CARD || paymentMethod === PaymentMethod.BOLETO) ? (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Parcelas</label>
-                      <input 
-                        type="number" 
-                        min="1" 
-                        max="12"
-                        className="w-full border-slate-300 rounded-lg p-2.5 border bg-white"
-                        value={installments}
-                        onChange={(e) => setInstallments(Number(e.target.value))}
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Conta de Destino</label>
-                      <select 
-                        className="w-full border-slate-300 rounded-lg p-2.5 border bg-white"
-                        value={bankAccount}
-                        onChange={(e) => setBankAccount(e.target.value)}
-                        required={paymentMethod === PaymentMethod.PIX || paymentMethod === PaymentMethod.DEBIT_CARD}
-                      >
-                        <option value="">Selecione...</option>
-                        {bankAccounts.map(b => (
-                          <option key={b.id} value={b.id}>{b.bankName} - {b.holder}</option>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Forma</label>
+                        <select 
+                        className="w-full border-slate-300 rounded-lg p-2 border bg-white text-sm"
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                        >
+                        {Object.values(PaymentMethod).map(m => (
+                            <option key={m} value={m}>{m}</option>
                         ))}
-                      </select>
+                        </select>
                     </div>
-                  )}
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Desconto (R$)</label>
-                    <input 
-                      type="number"
-                      className="w-full border-slate-300 rounded-lg p-2.5 border bg-white"
-                      value={discount}
-                      onChange={(e) => setDiscount(Number(e.target.value))}
-                      placeholder="0,00"
-                    />
+                    {(paymentMethod === PaymentMethod.CREDIT_CARD || paymentMethod === PaymentMethod.BOLETO) ? (
+                        <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Parcelas</label>
+                        <select
+                           className="w-full border-slate-300 rounded-lg p-2 border bg-white text-sm"
+                           value={installments}
+                           onChange={(e) => setInstallments(Number(e.target.value))}
+                        >
+                           {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                              <option key={n} value={n}>{n}x</option>
+                           ))}
+                        </select>
+                        </div>
+                    ) : (
+                        <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Conta Destino</label>
+                        <select 
+                            className="w-full border-slate-300 rounded-lg p-2 border bg-white text-sm"
+                            value={bankAccount}
+                            onChange={(e) => setBankAccount(e.target.value)}
+                            required={paymentMethod === PaymentMethod.PIX || paymentMethod === PaymentMethod.DEBIT_CARD}
+                        >
+                            <option value="">Selecione...</option>
+                            {bankAccounts.map(b => (
+                            <option key={b.id} value={b.id}>{b.bankName} - {b.holder}</option>
+                            ))}
+                        </select>
+                        </div>
+                    )}
                   </div>
                </div>
 
-               {/* Finalize Section */}
+               {/* Totals Section */}
                <div className="p-6 bg-slate-50 border-t border-slate-200">
-                  <div className="flex justify-between items-end mb-2">
+                  <div className="flex justify-between items-center mb-2">
                     <span className="text-slate-500">Subtotal</span>
-                    <span className="font-medium text-slate-600">R$ {selectedServices.reduce((acc, item) => acc + item.price, 0).toFixed(2)}</span>
+                    <span className="font-medium text-slate-600">R$ {subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between items-end mb-4">
+                  <div className="flex justify-between items-center mb-4">
                     <span className="text-slate-500">Desconto</span>
-                    <span className="font-medium text-red-500">- R$ {discount.toFixed(2)}</span>
+                    <div className="flex items-center gap-2">
+                       <span className="text-slate-400 text-xs">(Auto)</span>
+                       <span className="font-medium text-red-500">- R$ {discount.toFixed(2)}</span>
+                    </div>
                   </div>
                   
                   <div className="flex justify-between items-center mb-6 pt-4 border-t border-slate-200">
-                    <span className="text-lg font-bold text-slate-800">Total</span>
-                    <span className="text-3xl font-bold text-blue-600">
-                      R$ {calculateTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </span>
+                    <span className="text-lg font-bold text-slate-800">Total Final</span>
+                    <div className="relative w-40">
+                       <span className="absolute left-3 top-2 text-blue-600 font-bold">R$</span>
+                       <input 
+                         type="number"
+                         step="0.01"
+                         className="w-full pl-10 pr-2 py-1.5 text-right font-bold text-xl text-blue-600 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                         value={totalFinal}
+                         onChange={(e) => handleTotalChange(Number(e.target.value))}
+                       />
+                    </div>
                   </div>
 
                   <button 
@@ -343,13 +488,18 @@ export const Sales = () => {
                   <th className="px-6 py-4">Pagamento</th>
                   <th className="px-6 py-4 text-right">Valor Total</th>
                   <th className="px-6 py-4 text-center">Nota</th>
+                  <th className="px-6 py-4 text-center">Recibo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {sales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">{new Date(sale.date).toLocaleDateString('pt-BR')}</td>
-                    <td className="px-6 py-4 font-medium">{sale.clientName}</td>
+                    <td className="px-6 py-4 font-medium">
+                        {sale.clientName === 'CLIENTE NÃO INFORMADO' 
+                            ? <span className="text-slate-400 italic">Cliente não informado</span> 
+                            : sale.clientName}
+                    </td>
                     <td className="px-6 py-4 text-slate-500">{sale.items.length} item(s)</td>
                     <td className="px-6 py-4">
                       <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs border border-slate-200">
@@ -366,11 +516,20 @@ export const Sales = () => {
                         </span>
                       ) : '-'}
                     </td>
+                    <td className="px-6 py-4 text-center">
+                      <button 
+                         onClick={() => setPrintReceiptSale(sale)}
+                         className="text-slate-500 hover:text-slate-700 p-1 hover:bg-slate-100 rounded"
+                         title="Imprimir Recibo"
+                      >
+                         <Printer size={18}/>
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {sales.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400">Nenhuma venda registrada ainda.</td>
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">Nenhuma venda registrada ainda.</td>
                   </tr>
                 )}
               </tbody>
@@ -458,7 +617,10 @@ export const Sales = () => {
                  <div>
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Cliente</h4>
                     <p className="text-slate-800 font-medium text-lg">
-                       {clients.find(c => c.id === clientId)?.name || 'Cliente não identificado'}
+                       {clientId 
+                          ? clients.find(c => c.id === clientId)?.name 
+                          : <span className="text-slate-400 italic">CLIENTE NÃO INFORMADO</span>
+                       }
                     </p>
                  </div>
 
@@ -468,8 +630,11 @@ export const Sales = () => {
                     <ul className="space-y-2 text-sm text-slate-700">
                        {selectedServices.map((item, i) => (
                           <li key={i} className="flex justify-between border-b border-slate-200 pb-2 last:border-0 last:pb-0">
-                             <span>{item.serviceName}</span>
-                             <span className="font-mono">R$ {item.price.toFixed(2)}</span>
+                             <div>
+                               <span className="font-semibold text-xs text-slate-500 mr-2">{item.quantity}x</span>
+                               <span>{item.serviceName}</span>
+                             </div>
+                             <span className="font-mono">R$ {(item.price * item.quantity).toFixed(2)}</span>
                           </li>
                        ))}
                     </ul>
@@ -479,7 +644,7 @@ export const Sales = () => {
                  <div className="space-y-2">
                     <div className="flex justify-between text-sm text-slate-600">
                        <span>Subtotal</span>
-                       <span>R$ {selectedServices.reduce((acc, i) => acc + i.price, 0).toFixed(2)}</span>
+                       <span>R$ {subtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm text-red-500">
                        <span>Desconto</span>
@@ -487,7 +652,7 @@ export const Sales = () => {
                     </div>
                     <div className="flex justify-between text-2xl font-bold text-slate-800 pt-2 border-t border-slate-200">
                        <span>Total Final</span>
-                       <span>R$ {calculateTotal().toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                       <span>R$ {totalFinal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
                     </div>
                  </div>
 
@@ -530,6 +695,133 @@ export const Sales = () => {
            </div>
         </div>
       )}
+
+      {/* SUCCESS MODAL with Receipt Print Option */}
+      {showSuccessModal && lastSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-6 animate-fade-in">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                 <CheckCircle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">Venda Realizada!</h3>
+              <p className="text-slate-500 mb-6">A venda foi registrada com sucesso.</p>
+              
+              <div className="space-y-3">
+                 <button 
+                    onClick={() => {
+                        setPrintReceiptSale(lastSale);
+                        handleCloseSuccess();
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold shadow-sm flex items-center justify-center gap-2"
+                 >
+                    <Printer size={20} /> Imprimir Recibo
+                 </button>
+                 <button 
+                    onClick={handleCloseSuccess}
+                    className="w-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 py-3 rounded-lg font-medium"
+                 >
+                    Fechar
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* PRINT RECEIPT OVERLAY */}
+      {printReceiptSale && (
+        <div className="fixed inset-0 z-50 bg-slate-800/90 overflow-auto flex items-start justify-center p-4">
+          <div className="bg-white shadow-2xl w-full max-w-[80mm] min-h-[100mm] print:shadow-none print:w-auto print:max-w-none mx-auto my-8 print:m-0">
+             
+             {/* Print Controls (Hidden when printing) */}
+             <div className="flex justify-between items-center p-4 bg-slate-100 print:hidden border-b">
+                <span className="font-bold text-slate-700">Visualizar Recibo</span>
+                <div className="flex gap-2">
+                   <button onClick={() => window.print()} className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 flex items-center gap-1"><Printer size={14}/> Imprimir</button>
+                   <button onClick={() => setPrintReceiptSale(null)} className="bg-slate-300 text-slate-700 px-3 py-1 rounded text-sm hover:bg-slate-400">Fechar</button>
+                </div>
+             </div>
+
+             {/* RECEIPT CONTENT (Thermal Printer Style / A4 Simplified) */}
+             <div className="p-4 text-sm font-mono leading-tight text-slate-900">
+                
+                {/* Header */}
+                <div className="text-center border-b border-dashed border-slate-400 pb-4 mb-4">
+                   <h2 className="font-bold text-lg uppercase">{settings.name}</h2>
+                   <p className="text-xs">{settings.cnpj}</p>
+                   <p className="text-xs">{settings.address}</p>
+                   <p className="mt-2 font-bold">RECIBO DE VENDA #{printReceiptSale.id.substr(0,4)}</p>
+                   <p className="text-xs">{new Date(printReceiptSale.date).toLocaleString('pt-BR')}</p>
+                </div>
+
+                {/* Client */}
+                <div className="mb-4">
+                   <p className="font-bold">CLIENTE:</p>
+                   <p>{printReceiptSale.clientName}</p>
+                   {(() => {
+                      const c = clients.find(cl => cl.id === printReceiptSale.clientId);
+                      return c && c.document ? <p className="text-xs">CPF/CNPJ: {c.document}</p> : null;
+                   })()}
+                </div>
+
+                {/* Items */}
+                <div className="mb-4 border-b border-dashed border-slate-400 pb-4">
+                   <table className="w-full">
+                      <thead>
+                        <tr className="text-left">
+                           <th className="pb-1">ITEM</th>
+                           <th className="pb-1 text-right">QTD</th>
+                           <th className="pb-1 text-right">TOT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                         {printReceiptSale.items.map((item, i) => (
+                            <tr key={i}>
+                               <td className="py-1 pr-2">
+                                  {item.serviceName}
+                                  <div className="text-xs text-slate-500">Un: {item.price.toFixed(2)}</div>
+                               </td>
+                               <td className="py-1 text-right align-top">{item.quantity}</td>
+                               <td className="py-1 text-right align-top">{(item.price * item.quantity).toFixed(2)}</td>
+                            </tr>
+                         ))}
+                      </tbody>
+                   </table>
+                </div>
+
+                {/* Totals */}
+                <div className="mb-6">
+                   <div className="flex justify-between">
+                      <span>SUBTOTAL:</span>
+                      <span>{printReceiptSale.totalAmount.toFixed(2)}</span>
+                   </div>
+                   {printReceiptSale.discount > 0 && (
+                     <div className="flex justify-between">
+                        <span>DESCONTO:</span>
+                        <span>-{printReceiptSale.discount.toFixed(2)}</span>
+                     </div>
+                   )}
+                   <div className="flex justify-between font-bold text-lg mt-2">
+                      <span>TOTAL:</span>
+                      <span>{printReceiptSale.finalAmount.toFixed(2)}</span>
+                   </div>
+                   <div className="mt-2 text-xs">
+                      Forma Pagto: {printReceiptSale.paymentMethod}
+                      {printReceiptSale.installmentsCount > 1 && ` (${printReceiptSale.installmentsCount}x)`}
+                   </div>
+                </div>
+
+                {/* Footer */}
+                <div className="text-center text-xs mt-8 pt-4 border-t border-dashed border-slate-400">
+                   <p>Obrigado pela preferência!</p>
+                   <p className="mt-4">_______________________________</p>
+                   <p>Assinatura</p>
+                </div>
+
+             </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -1,134 +1,351 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store';
-import { Users, Briefcase, Landmark } from 'lucide-react';
+import { Users, Briefcase, Landmark, Plus, Search, Edit, Save, X } from 'lucide-react';
+import { Client, Service, BankAccount } from '../types';
 
 export const Registries = () => {
   const [tab, setTab] = useState<'clientes' | 'servicos' | 'bancos'>('clientes');
   const { clients, services, bankAccounts, addClient, addService, addBankAccount } = useAppStore();
 
-  const [newClientName, setNewClientName] = useState('');
-  const [newServiceDesc, setNewServiceDesc] = useState('');
-  const [newBankName, setNewBankName] = useState('');
+  // Modal States
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
+
+  // Form States
+  const [clientForm, setClientForm] = useState<Partial<Client>>({});
+  const [serviceForm, setServiceForm] = useState<Partial<Service>>({});
+  const [bankForm, setBankForm] = useState<Partial<BankAccount>>({});
+
+  const handleOpenClient = (client?: Client) => {
+    setClientForm(client || { name: '', document: '', email: '', phone: '', address: '', notes: '' });
+    setShowClientModal(true);
+  };
+
+  const handleSaveClient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (clientForm.name) {
+      addClient({
+        id: clientForm.id || Math.random().toString(36).substr(2, 9),
+        name: clientForm.name,
+        document: clientForm.document || '',
+        email: clientForm.email || '',
+        phone: clientForm.phone || '',
+        address: clientForm.address || '',
+        notes: clientForm.notes || ''
+      });
+      setShowClientModal(false);
+    }
+  };
+
+  const handleOpenService = (service?: Service) => {
+    setServiceForm(service || { name: '', price: 0, description: '', taxCode: '', cnae: '', issAliquot: 0 });
+    setShowServiceModal(true);
+  };
+
+  const handleSaveService = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (serviceForm.name && serviceForm.price !== undefined) {
+      addService({
+        id: serviceForm.id || Math.random().toString(36).substr(2, 9),
+        name: serviceForm.name,
+        price: Number(serviceForm.price),
+        description: serviceForm.description || '',
+        taxCode: serviceForm.taxCode || '',
+        cnae: serviceForm.cnae || '',
+        issAliquot: Number(serviceForm.issAliquot || 0)
+      });
+      setShowServiceModal(false);
+    }
+  };
+
+  const handleOpenBank = (bank?: BankAccount) => {
+    setBankForm(bank || { bankName: '', agency: '', accountNumber: '', holder: '', initialBalance: 0 });
+    setShowBankModal(true);
+  };
+
+  const handleSaveBank = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bankForm.bankName) {
+      addBankAccount({
+        id: bankForm.id || Math.random().toString(36).substr(2, 9),
+        bankName: bankForm.bankName,
+        agency: bankForm.agency || '',
+        accountNumber: bankForm.accountNumber || '',
+        holder: bankForm.holder || '',
+        initialBalance: Number(bankForm.initialBalance || 0)
+      });
+      setShowBankModal(false);
+    }
+  };
   
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Cadastros</h1>
+      <div className="flex justify-between items-center">
+         <h1 className="text-2xl font-bold text-slate-800">Cadastros</h1>
+      </div>
       
-      <div className="flex space-x-4 border-b border-slate-200">
+      <div className="flex space-x-1 bg-white p-1 rounded-lg border border-slate-200 w-fit">
         <button 
           onClick={() => setTab('clientes')} 
-          className={`pb-3 px-2 flex items-center gap-2 ${tab === 'clientes' ? 'border-b-2 border-blue-500 text-blue-600 font-medium' : 'text-slate-500'}`}
+          className={`px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium transition-colors ${tab === 'clientes' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
         >
           <Users size={18} /> Clientes
         </button>
         <button 
           onClick={() => setTab('servicos')} 
-          className={`pb-3 px-2 flex items-center gap-2 ${tab === 'servicos' ? 'border-b-2 border-blue-500 text-blue-600 font-medium' : 'text-slate-500'}`}
+          className={`px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium transition-colors ${tab === 'servicos' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
         >
           <Briefcase size={18} /> Serviços
         </button>
         <button 
           onClick={() => setTab('bancos')} 
-          className={`pb-3 px-2 flex items-center gap-2 ${tab === 'bancos' ? 'border-b-2 border-blue-500 text-blue-600 font-medium' : 'text-slate-500'}`}
+          className={`px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium transition-colors ${tab === 'bancos' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
         >
           <Landmark size={18} /> Contas Bancárias
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        {/* CLIENTS TAB */}
         {tab === 'clientes' && (
-          <div className="space-y-6">
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Nome do novo cliente" 
-                className="flex-1 border p-2 rounded" 
-                value={newClientName}
-                onChange={e => setNewClientName(e.target.value)}
-              />
-              <button 
-                className="bg-blue-600 text-white px-4 rounded"
-                onClick={() => {
-                  if(newClientName) {
-                    addClient({ id: Math.random().toString(), name: newClientName, document: '', email: '', phone: '', address: '' });
-                    setNewClientName('');
-                  }
-                }}
-              >Adicionar Rápido</button>
-            </div>
-            <ul className="divide-y">
-              {clients.map(c => (
-                <li key={c.id} className="py-3 flex justify-between">
-                  <span className="font-medium">{c.name}</span>
-                  <span className="text-slate-500 text-sm">{c.document || 'Sem documento'}</span>
-                </li>
-              ))}
-            </ul>
+          <div>
+             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+               <div className="relative w-64">
+                 <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                 <input type="text" placeholder="Buscar cliente..." className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+               </div>
+               <button onClick={() => handleOpenClient()} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-700">
+                  <Plus size={18} /> Novo Cliente
+               </button>
+             </div>
+             <table className="w-full text-sm text-left">
+               <thead className="bg-slate-50 text-slate-600 font-medium">
+                 <tr>
+                   <th className="px-6 py-3">Nome</th>
+                   <th className="px-6 py-3">CPF/CNPJ</th>
+                   <th className="px-6 py-3">Contato</th>
+                   <th className="px-6 py-3">Endereço</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                 {clients.map(c => (
+                   <tr key={c.id} className="hover:bg-slate-50 group cursor-pointer" onClick={() => handleOpenClient(c)}>
+                     <td className="px-6 py-4 font-medium text-slate-800">{c.name}</td>
+                     <td className="px-6 py-4 text-slate-500">{c.document || '-'}</td>
+                     <td className="px-6 py-4 text-slate-500">
+                       <div className="flex flex-col">
+                         <span>{c.phone}</span>
+                         <span className="text-xs">{c.email}</span>
+                       </div>
+                     </td>
+                     <td className="px-6 py-4 text-slate-500 truncate max-w-xs">{c.address || '-'}</td>
+                   </tr>
+                 ))}
+                 {clients.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">Nenhum cliente cadastrado.</td></tr>}
+               </tbody>
+             </table>
           </div>
         )}
 
+        {/* SERVICES TAB */}
         {tab === 'servicos' && (
-          <div className="space-y-6">
-             <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Nome do serviço" 
-                className="flex-1 border p-2 rounded" 
-                value={newServiceDesc}
-                onChange={e => setNewServiceDesc(e.target.value)}
-              />
-              <button 
-                 className="bg-blue-600 text-white px-4 rounded"
-                 onClick={() => {
-                  if(newServiceDesc) {
-                    addService({ id: Math.random().toString(), name: newServiceDesc, price: 100, description: '', taxCode: '' });
-                    setNewServiceDesc('');
-                  }
-                }}
-              >Adicionar Rápido</button>
-            </div>
-            <ul className="divide-y">
-              {services.map(s => (
-                <li key={s.id} className="py-3 flex justify-between">
-                  <span>{s.name}</span>
-                  <span className="font-mono text-slate-600">R$ {s.price}</span>
-                </li>
-              ))}
-            </ul>
+          <div>
+             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+               <div className="relative w-64">
+                 <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                 <input type="text" placeholder="Buscar serviço..." className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+               </div>
+               <button onClick={() => handleOpenService()} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-700">
+                  <Plus size={18} /> Novo Serviço
+               </button>
+             </div>
+             <table className="w-full text-sm text-left">
+               <thead className="bg-slate-50 text-slate-600 font-medium">
+                 <tr>
+                   <th className="px-6 py-3">Serviço</th>
+                   <th className="px-6 py-3">Preço Base</th>
+                   <th className="px-6 py-3">Cód. Tributação</th>
+                   <th className="px-6 py-3">Alíq. ISS</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                 {services.map(s => (
+                   <tr key={s.id} className="hover:bg-slate-50 group cursor-pointer" onClick={() => handleOpenService(s)}>
+                     <td className="px-6 py-4 font-medium text-slate-800">{s.name}</td>
+                     <td className="px-6 py-4 text-slate-700 font-semibold">R$ {s.price.toFixed(2)}</td>
+                     <td className="px-6 py-4 text-slate-500">{s.taxCode || '-'}</td>
+                     <td className="px-6 py-4 text-slate-500">{s.issAliquot ? `${s.issAliquot}%` : '-'}</td>
+                   </tr>
+                 ))}
+                 {services.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">Nenhum serviço cadastrado.</td></tr>}
+               </tbody>
+             </table>
           </div>
         )}
 
+        {/* BANKS TAB */}
         {tab === 'bancos' && (
-          <div className="space-y-6">
-             <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Nome do banco / conta" 
-                className="flex-1 border p-2 rounded" 
-                value={newBankName}
-                onChange={e => setNewBankName(e.target.value)}
-              />
-              <button 
-                 className="bg-blue-600 text-white px-4 rounded"
-                 onClick={() => {
-                  if(newBankName) {
-                    addBankAccount({ id: Math.random().toString(), bankName: newBankName, agency: '', accountNumber: '', holder: '', initialBalance: 0 });
-                    setNewBankName('');
-                  }
-                }}
-              >Adicionar Rápido</button>
-            </div>
-            <ul className="divide-y">
-              {bankAccounts.map(b => (
-                <li key={b.id} className="py-3 flex justify-between">
-                  <span>{b.bankName}</span>
-                  <span className="font-mono text-slate-600">{b.agency}/{b.accountNumber}</span>
-                </li>
-              ))}
-            </ul>
+          <div>
+             <div className="p-4 border-b border-slate-100 flex justify-end items-center bg-slate-50/50">
+               <button onClick={() => handleOpenBank()} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-blue-700">
+                  <Plus size={18} /> Nova Conta
+               </button>
+             </div>
+             <table className="w-full text-sm text-left">
+               <thead className="bg-slate-50 text-slate-600 font-medium">
+                 <tr>
+                   <th className="px-6 py-3">Banco / Descrição</th>
+                   <th className="px-6 py-3">Agência / Conta</th>
+                   <th className="px-6 py-3">Titular</th>
+                   <th className="px-6 py-3 text-right">Saldo Inicial</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                 {bankAccounts.map(b => (
+                   <tr key={b.id} className="hover:bg-slate-50 group cursor-pointer" onClick={() => handleOpenBank(b)}>
+                     <td className="px-6 py-4 font-medium text-slate-800">{b.bankName}</td>
+                     <td className="px-6 py-4 text-slate-500">{b.agency} / {b.accountNumber}</td>
+                     <td className="px-6 py-4 text-slate-500">{b.holder}</td>
+                     <td className="px-6 py-4 text-right font-mono text-slate-700">R$ {b.initialBalance.toFixed(2)}</td>
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
           </div>
         )}
       </div>
+
+      {/* CLIENT MODAL */}
+      {showClientModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b bg-slate-50">
+              <h3 className="font-bold text-slate-800">Cadastro de Cliente</h3>
+              <button onClick={() => setShowClientModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            </div>
+            <form onSubmit={handleSaveClient} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo / Razão Social</label>
+                <input required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">CPF / CNPJ</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.document} onChange={e => setClientForm({...clientForm, document: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Telefone / WhatsApp</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
+                <input type="email" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Endereço Completo</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.address} onChange={e => setClientForm({...clientForm, address: e.target.value})} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
+                <textarea className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" rows={3} value={clientForm.notes} onChange={e => setClientForm({...clientForm, notes: e.target.value})} />
+              </div>
+              <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t mt-2">
+                <button type="button" onClick={() => setShowClientModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded">Cancelar</button>
+                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 flex items-center gap-2"><Save size={18}/> Salvar Cliente</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SERVICE MODAL */}
+      {showServiceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b bg-slate-50">
+              <h3 className="font-bold text-slate-800">Cadastro de Serviço</h3>
+              <button onClick={() => setShowServiceModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            </div>
+            <form onSubmit={handleSaveService} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Serviço</label>
+                <input required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Preço Base (R$)</label>
+                <input type="number" step="0.01" required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.price} onChange={e => setServiceForm({...serviceForm, price: Number(e.target.value)})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">CNAE</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.cnae} onChange={e => setServiceForm({...serviceForm, cnae: e.target.value})} placeholder="Ex: 6201-5/00" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Descrição Detalhada</label>
+                <textarea className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" rows={2} value={serviceForm.description} onChange={e => setServiceForm({...serviceForm, description: e.target.value})} />
+              </div>
+              
+              <div className="md:col-span-2 pt-2">
+                 <h4 className="font-bold text-xs uppercase text-slate-400 border-b pb-1 mb-3">Dados Fiscais (NFS-e)</h4>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Cód. Trib. Municipal (LC 116)</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.taxCode} onChange={e => setServiceForm({...serviceForm, taxCode: e.target.value})} placeholder="Ex: 14.01" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Alíquota ISS (%)</label>
+                <input type="number" step="0.1" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.issAliquot} onChange={e => setServiceForm({...serviceForm, issAliquot: Number(e.target.value)})} />
+              </div>
+
+              <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t mt-2">
+                <button type="button" onClick={() => setShowServiceModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded">Cancelar</button>
+                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 flex items-center gap-2"><Save size={18}/> Salvar Serviço</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BANK MODAL */}
+      {showBankModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b bg-slate-50">
+              <h3 className="font-bold text-slate-800">Conta Bancária / Caixa</h3>
+              <button onClick={() => setShowBankModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            </div>
+            <form onSubmit={handleSaveBank} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Banco / Descrição</label>
+                <input required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={bankForm.bankName} onChange={e => setBankForm({...bankForm, bankName: e.target.value})} placeholder="Ex: Banco Itaú ou Caixa Pequeno" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Agência</label>
+                    <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={bankForm.agency} onChange={e => setBankForm({...bankForm, agency: e.target.value})} />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Conta</label>
+                    <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={bankForm.accountNumber} onChange={e => setBankForm({...bankForm, accountNumber: e.target.value})} />
+                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Titular</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={bankForm.holder} onChange={e => setBankForm({...bankForm, holder: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Saldo Inicial</label>
+                <input type="number" step="0.01" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={bankForm.initialBalance} onChange={e => setBankForm({...bankForm, initialBalance: Number(e.target.value)})} />
+              </div>
+              
+              <div className="flex justify-end gap-3 pt-4 border-t mt-2">
+                <button type="button" onClick={() => setShowBankModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded">Cancelar</button>
+                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 flex items-center gap-2"><Save size={18}/> Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

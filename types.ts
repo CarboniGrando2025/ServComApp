@@ -29,6 +29,7 @@ export interface Client {
   email: string;
   phone: string;
   address: string;
+  notes?: string; // New field
 }
 
 export interface Service {
@@ -36,7 +37,9 @@ export interface Service {
   name: string;
   price: number;
   description: string;
-  taxCode: string; // Código de tributação (ABRASF)
+  taxCode: string; // Código de tributação (ABRASF/LC 116)
+  cnae?: string; // New field
+  issAliquot?: number; // New field
 }
 
 export interface BankAccount {

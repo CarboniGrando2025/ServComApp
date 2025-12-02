@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../store';
 import { InstallmentStatus, Installment } from '../types';
-import { TrendingUp, AlertCircle, Calendar, CheckCircle, PlusCircle } from 'lucide-react';
+import { TrendingUp, AlertCircle, Calendar, CheckCircle, Search } from 'lucide-react';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const colors: Record<string, string> = {
@@ -26,7 +26,8 @@ const KPICard = ({ title, value, icon: Icon, colorClass }: any) => (
 );
 
 export const Receivables = () => {
-  const { accountsReceivable, payInstallment, bankAccounts } = useAppStore();
+  const { accountsReceivable, payInstallment, bankAccounts, sales } = useAppStore();
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Payment Modal State
   const [selectedItem, setSelectedItem] = useState<{id: string, amount: number, totalAmount: number} | null>(null);
@@ -72,6 +73,32 @@ export const Receivables = () => {
     .filter(i => i.status === InstallmentStatus.OVERDUE || (i.status === InstallmentStatus.PENDING && new Date(i.dueDate) < new Date()))
     .reduce((acc, i) => acc + (i.amount - i.paidAmount), 0);
 
+  // Helper to get Sale info and Filter
+  const filteredReceivables = useMemo(() => {
+    return accountsReceivable.filter(inst => {
+      // Find related sale to get payment method and client name if not in description
+      const sale = sales.find(s => s.id === inst.saleId);
+      const paymentMethod = sale?.paymentMethod || '';
+      const clientName = sale?.clientName || '';
+      
+      const searchLower = searchTerm.toLowerCase();
+
+      return (
+        inst.description.toLowerCase().includes(searchLower) ||
+        clientName.toLowerCase().includes(searchLower) ||
+        paymentMethod.toLowerCase().includes(searchLower) ||
+        inst.amount.toString().includes(searchLower)
+      );
+    }).map(inst => {
+       const sale = sales.find(s => s.id === inst.saleId);
+       return {
+         ...inst,
+         paymentMethod: sale?.paymentMethod || '-',
+         clientName: sale?.clientName || ''
+       };
+    });
+  }, [accountsReceivable, sales, searchTerm]);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -85,14 +112,26 @@ export const Receivables = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className="font-bold text-slate-700">Títulos de Vendas e Serviços</h2>
+              
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar (Cliente, Forma Pagto...)" 
+                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
           </div>
           <table className="w-full text-sm text-left">
               <thead className="bg-slate-50 text-slate-600 font-medium">
               <tr>
                   <th className="px-6 py-4">Vencimento</th>
                   <th className="px-6 py-4">Descrição / Cliente</th>
+                  <th className="px-6 py-4">Forma Pagto</th>
                   <th className="px-6 py-4">Valor Original</th>
                   <th className="px-6 py-4">Recebido</th>
                   <th className="px-6 py-4">Saldo Restante</th>
@@ -101,10 +140,15 @@ export const Receivables = () => {
               </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-              {accountsReceivable.map((inst) => (
+              {filteredReceivables.map((inst) => (
                   <tr key={inst.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4">{new Date(inst.dueDate).toLocaleDateString('pt-BR')}</td>
-                  <td className="px-6 py-4 font-medium">{inst.description}</td>
+                  <td className="px-6 py-4 font-medium">
+                    {inst.description}
+                  </td>
+                  <td className="px-6 py-4 text-slate-600 text-xs">
+                     {inst.paymentMethod}
+                  </td>
                   <td className="px-6 py-4">R$ {inst.amount.toFixed(2)}</td>
                   <td className="px-6 py-4 text-green-600">R$ {inst.paidAmount.toFixed(2)}</td>
                   <td className="px-6 py-4 font-bold text-slate-700">R$ {(inst.amount - inst.paidAmount).toFixed(2)}</td>
@@ -121,8 +165,8 @@ export const Receivables = () => {
                   </td>
                   </tr>
               ))}
-              {accountsReceivable.length === 0 && (
-                  <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-400">Nenhum título a receber encontrado.</td></tr>
+              {filteredReceivables.length === 0 && (
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-slate-400">Nenhum título a receber encontrado.</td></tr>
               )}
               </tbody>
           </table>

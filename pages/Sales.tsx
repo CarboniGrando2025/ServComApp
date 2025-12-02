@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { PaymentMethod, Sale, SaleItem, Quote } from '../types';
-import { Plus, Trash2, Search, FileText, ShoppingCart, User, CreditCard, ChevronRight, CheckCircle, Download, X, AlertCircle, Minus, Printer } from 'lucide-react';
+import { Plus, Trash2, Search, FileText, ShoppingCart, User, CreditCard, ChevronRight, CheckCircle, Download, X, AlertCircle, Minus, Printer, MapPin, AlertTriangle } from 'lucide-react';
 
 export const Sales = () => {
   const { clients, services, bankAccounts, addSale, sales, quotes, updateQuoteStatus, settings } = useAppStore();
@@ -25,14 +25,22 @@ export const Sales = () => {
   const [installments, setInstallments] = useState(1);
   const [bankAccount, setBankAccount] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [serviceLocation, setServiceLocation] = useState('');
+
+  // Retention States
+  const [calculatedRetentions, setCalculatedRetentions] = useState(0);
+  const [deductRetentions, setDeductRetentions] = useState(true);
 
   // Computed Subtotal
   const subtotal = useMemo(() => {
     return selectedServices.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   }, [selectedServices]);
 
-  // Computed Total (Final)
-  const totalFinal = Math.max(0, subtotal - discount);
+  // Computed Total (Gross - Discount)
+  const totalAfterDiscount = Math.max(0, subtotal - discount);
+
+  // Computed Final Total (Gross - Discount - (Retentions if checked))
+  const totalFinal = deductRetentions ? Math.max(0, totalAfterDiscount - calculatedRetentions) : totalAfterDiscount;
 
   // Filtered Lists
   const filteredServices = services.filter(s => 
@@ -80,10 +88,23 @@ export const Sales = () => {
 
   // Logic to handle "Editing Total" -> Reverse calculate discount
   const handleTotalChange = (newTotal: number) => {
-    // Total = Subtotal - Discount
-    // Discount = Subtotal - Total
+    // Note: When manually changing total, we assume this is the Desired Final Amount.
+    // Logic: Subtotal - Discount - Retentions(if deducted) = NewTotal
+    // Discount = Subtotal - Retentions(if deducted) - NewTotal
+    
+    // We need to know current retentions.
+    // Retentions are percentage based. If discount changes, does retention change?
+    // Usually Retentions are on GROSS or (GROSS-UNCONDITIONAL DISCOUNT).
+    // Let's assume Retentions are based on (Subtotal - Discount). This makes it circular.
+    // SIMPLIFICATION: We will calculate Retentions based on the effective price of items.
+    // To handle manual total override properly with retentions is complex.
+    // Let's simplified: Discount = Subtotal - NewTotal (ignoring retention toggle for the manual input calc for now, 
+    // or assume user is entering the "Pre-Retention" value if retentions exist).
+    
+    // Actually, to avoid circular logic confusion for the user:
+    // Manual Total Editing sets the "Total After Discount".
     const newDiscount = subtotal - newTotal;
-    setDiscount(newDiscount); // Allow negative discount (surcharge) if needed, or clamp?
+    setDiscount(newDiscount);
   };
 
   const handleImportQuote = (quote: Quote) => {
@@ -97,12 +118,44 @@ export const Sales = () => {
     setShowImportModal(false);
   };
 
+  const calculateRetentionsValue = () => {
+      let totalRet = 0;
+      // Tax Base: We will use the proportional discount logic or simply (ItemPrice * Qty).
+      // Standard practice: Retentions apply to the service value.
+      // If there is a global discount, it usually reduces the tax base.
+      // Ratio of Final/Subtotal
+      const ratio = subtotal > 0 ? (Math.max(0, subtotal - discount) / subtotal) : 1;
+
+      selectedServices.forEach(item => {
+          const service = services.find(s => s.id === item.serviceId);
+          if (service) {
+              // Base for this item (considering global discount distribution)
+              const itemBase = (item.price * item.quantity) * ratio;
+              
+              const pis = itemBase * ((service.pis || 0) / 100);
+              const cofins = itemBase * ((service.cofins || 0) / 100);
+              const csll = itemBase * ((service.csll || 0) / 100);
+              const ir = itemBase * ((service.ir || 0) / 100);
+              const inss = itemBase * ((service.inss || 0) / 100);
+              
+              totalRet += (pis + cofins + csll + ir + inss);
+          }
+      });
+      return totalRet;
+  };
+
   const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedServices.length === 0) {
         alert("Adicione pelo menos um serviço.");
         return;
     }
+    
+    // Calculate Retentions before showing modal
+    const retAmount = calculateRetentionsValue();
+    setCalculatedRetentions(retAmount);
+    setDeductRetentions(true); // Default to YES
+
     setShowConfirmation(true);
   };
 
@@ -126,10 +179,13 @@ export const Sales = () => {
       items: selectedServices,
       totalAmount: subtotal,
       discount,
-      finalAmount: totalFinal,
+      finalAmount: totalFinal, // Uses deductRetentions logic
       paymentMethod,
       installmentsCount: installments,
-      bankAccountId: bankAccount
+      bankAccountId: bankAccount,
+      serviceLocation: serviceLocation,
+      retentionAmount: calculatedRetentions,
+      deductedRetentions: calculatedRetentions > 0 ? deductRetentions : false
     };
 
     addSale(newSale);
@@ -150,6 +206,8 @@ export const Sales = () => {
     setInstallments(1);
     setPaymentMethod(PaymentMethod.CASH);
     setImportedQuoteId(null);
+    setServiceLocation('');
+    setCalculatedRetentions(0);
   };
 
   const handleCloseSuccess = () => {
@@ -373,6 +431,24 @@ export const Sales = () => {
                   </div>
                </div>
 
+               {/* Service Location */}
+               <div className="p-6 border-b border-slate-100 space-y-4">
+                   <h2 className="font-bold text-slate-700 flex items-center gap-2">
+                    <MapPin size={20} className="text-blue-600"/> 
+                    Local da Prestação
+                  </h2>
+                  <div>
+                      <input 
+                         type="text"
+                         className="w-full border p-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                         placeholder="Cidade - UF (Ex: Foz do Iguaçu - PR)"
+                         value={serviceLocation}
+                         onChange={(e) => setServiceLocation(e.target.value)}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Importante para emissão correta da NFSe.</p>
+                  </div>
+               </div>
+
                {/* Payment Details */}
                <div className="p-6 space-y-4 flex-1">
                   <h2 className="font-bold text-slate-700 flex items-center gap-2">
@@ -414,13 +490,14 @@ export const Sales = () => {
                             className="w-full border-slate-300 rounded-lg p-2 border bg-white text-sm"
                             value={bankAccount}
                             onChange={(e) => setBankAccount(e.target.value)}
-                            required={paymentMethod === PaymentMethod.PIX || paymentMethod === PaymentMethod.DEBIT_CARD}
+                            required
                         >
                             <option value="">Selecione...</option>
                             {bankAccounts.map(b => (
                             <option key={b.id} value={b.id}>{b.bankName} - {b.holder}</option>
                             ))}
                         </select>
+                        <p className="text-[10px] text-slate-400 mt-1">Selecione onde o dinheiro entrará (Ex: Caixa Físico)</p>
                         </div>
                     )}
                   </div>
@@ -448,7 +525,7 @@ export const Sales = () => {
                          type="number"
                          step="0.01"
                          className="w-full pl-10 pr-2 py-1.5 text-right font-bold text-xl text-blue-600 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                         value={totalFinal}
+                         value={totalAfterDiscount}
                          onChange={(e) => handleTotalChange(Number(e.target.value))}
                        />
                     </div>
@@ -601,8 +678,8 @@ export const Sales = () => {
       {/* CONFIRMATION SUMMARY MODAL */}
       {showConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in">
-              <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in max-h-[95vh] overflow-y-auto">
+              <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0 z-10">
                  <h3 className="text-lg font-bold flex items-center gap-2">
                     <AlertCircle size={20} className="text-blue-400"/>
                     Confirmar Venda
@@ -640,6 +717,53 @@ export const Sales = () => {
                     </ul>
                  </div>
 
+                 {/* Retentions Logic */}
+                 {calculatedRetentions > 0 && (
+                     <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
+                        <h4 className="flex items-center gap-2 text-sm font-bold text-amber-800 mb-2">
+                           <AlertTriangle size={16}/> Retenções Federais Detectadas
+                        </h4>
+                        <div className="mb-3 text-sm text-amber-700">
+                           <p>Total de Retenções (PIS/COFINS/CSLL/IR/INSS): <strong>R$ {calculatedRetentions.toFixed(2)}</strong></p>
+                        </div>
+                        
+                        <div className="space-y-3 bg-white p-3 rounded border border-amber-100">
+                            <p className="text-xs text-slate-500 font-bold uppercase mb-1">Deseja descontar do financeiro?</p>
+                            <label className="flex items-start gap-2 cursor-pointer">
+                                <input 
+                                    type="radio" 
+                                    checked={deductRetentions} 
+                                    onChange={() => setDeductRetentions(true)}
+                                    className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                    <span className="block text-sm font-medium text-slate-800">Sim, receber o valor líquido</span>
+                                    <span className="block text-xs text-slate-500">O contas a receber terá o valor de <strong>R$ {(totalAfterDiscount - calculatedRetentions).toFixed(2)}</strong></span>
+                                </div>
+                            </label>
+                            
+                            <label className="flex items-start gap-2 cursor-pointer">
+                                <input 
+                                    type="radio" 
+                                    checked={!deductRetentions} 
+                                    onChange={() => setDeductRetentions(false)}
+                                    className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                    <span className="block text-sm font-medium text-slate-800">Não, receber o valor bruto</span>
+                                    <span className="block text-xs text-slate-500">O contas a receber terá o valor de <strong>R$ {totalAfterDiscount.toFixed(2)}</strong></span>
+                                </div>
+                            </label>
+                        </div>
+
+                        {!deductRetentions && (
+                            <div className="mt-2 text-xs text-amber-800 font-medium bg-amber-100 p-2 rounded">
+                                Atenção: Haverá divergência entre o valor financeiro e o valor líquido da nota fiscal.
+                            </div>
+                        )}
+                     </div>
+                 )}
+
                  {/* Financials */}
                  <div className="space-y-2">
                     <div className="flex justify-between text-sm text-slate-600">
@@ -650,8 +774,16 @@ export const Sales = () => {
                        <span>Desconto</span>
                        <span>- R$ {discount.toFixed(2)}</span>
                     </div>
+                    
+                    {calculatedRetentions > 0 && deductRetentions && (
+                        <div className="flex justify-between text-sm text-slate-500">
+                            <span>Retenções (Deduzidas)</span>
+                            <span>- R$ {calculatedRetentions.toFixed(2)}</span>
+                        </div>
+                    )}
+
                     <div className="flex justify-between text-2xl font-bold text-slate-800 pt-2 border-t border-slate-200">
-                       <span>Total Final</span>
+                       <span>Total a Receber</span>
                        <span>R$ {totalFinal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
                     </div>
                  </div>
@@ -800,6 +932,13 @@ export const Sales = () => {
                         <span>-{printReceiptSale.discount.toFixed(2)}</span>
                      </div>
                    )}
+                   {printReceiptSale.retentionAmount && printReceiptSale.deductedRetentions ? (
+                        <div className="flex justify-between text-xs mt-1">
+                            <span>RETENÇÕES:</span>
+                            <span>-{printReceiptSale.retentionAmount.toFixed(2)}</span>
+                        </div>
+                   ) : null}
+
                    <div className="flex justify-between font-bold text-lg mt-2">
                       <span>TOTAL:</span>
                       <span>{printReceiptSale.finalAmount.toFixed(2)}</span>

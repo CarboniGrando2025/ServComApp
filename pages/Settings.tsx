@@ -129,6 +129,21 @@ export const Settings = () => {
                </div>
             </div>
 
+            {/* INTEGRATION SETTINGS */}
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+               <h3 className="text-sm font-bold text-slate-600 uppercase mb-3">Configurações de Emissão</h3>
+               <div>
+                  <label className="block text-sm font-medium mb-1">Site da Prefeitura (Emissão Manual)</label>
+                  <input 
+                      className="w-full border p-2 rounded" 
+                      value={companyForm.nfseWebsite || ''} 
+                      onChange={e => setCompanyForm({...companyForm, nfseWebsite: e.target.value})} 
+                      placeholder="Ex: https://nfse.fozdoiguacu.pr.gov.br"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Este link será usado no botão 'Emitir NFS-e'.</p>
+               </div>
+            </div>
+
             {/* ADDRESS INFO */}
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                <h3 className="text-sm font-bold text-slate-600 uppercase mb-3">Endereço Completo (Obrigatório para XML)</h3>

@@ -84,7 +84,12 @@ const initialServices: Service[] = [
     itemLCServico: '17.01',
     municipalCode: '01234',
     cnae: '7020-4/00',
-    issAliquot: 2.0
+    issAliquot: 2.0,
+    pis: 0.65,
+    cofins: 3.0,
+    csll: 1.0,
+    ir: 1.5,
+    inss: 0
   },
   { 
     id: 's2', 
@@ -94,7 +99,12 @@ const initialServices: Service[] = [
     itemLCServico: '01.07',
     municipalCode: '05678',
     cnae: '6201-5/00',
-    issAliquot: 3.0
+    issAliquot: 3.0,
+    pis: 0,
+    cofins: 0,
+    csll: 0,
+    ir: 0,
+    inss: 0
   },
 ];
 
@@ -162,7 +172,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     taxRegime: 'Simples Nacional',
     specialTaxRegime: '0', // 0 - Sem regime especial
     optanteSimplesNacional: true,
-    incentivadorCultural: false
+    incentivadorCultural: false,
+    nfseWebsite: 'https://nfse.fozdoiguacu.pr.gov.br'
   },
 
   addClient: (client) => set((state) => ({ clients: [...state.clients, client] })),

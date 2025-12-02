@@ -51,7 +51,11 @@ export const Registries = () => {
   };
 
   const handleOpenService = (service?: Service) => {
-    setServiceForm(service || { name: '', price: 0, description: '', itemLCServico: '', municipalCode: '', cnae: '', issAliquot: 0 });
+    setServiceForm(service || { 
+        name: '', price: 0, description: '', 
+        itemLCServico: '', municipalCode: '', cnae: '', issAliquot: 0,
+        pis: 0, cofins: 0, csll: 0, ir: 0, inss: 0
+    });
     setShowServiceModal(true);
   };
 
@@ -66,7 +70,14 @@ export const Registries = () => {
         itemLCServico: serviceForm.itemLCServico || '',
         municipalCode: serviceForm.municipalCode || '',
         cnae: serviceForm.cnae || '',
-        issAliquot: Number(serviceForm.issAliquot || 0)
+        issAliquot: Number(serviceForm.issAliquot || 0),
+        
+        // Retentions
+        pis: Number(serviceForm.pis || 0),
+        cofins: Number(serviceForm.cofins || 0),
+        csll: Number(serviceForm.csll || 0),
+        ir: Number(serviceForm.ir || 0),
+        inss: Number(serviceForm.inss || 0),
       });
       setShowServiceModal(false);
     }
@@ -310,8 +321,8 @@ export const Registries = () => {
       {/* SERVICE MODAL */}
       {showServiceModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b bg-slate-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b bg-slate-50 sticky top-0 z-10">
               <h3 className="font-bold text-slate-800">Cadastro de Serviço</h3>
               <button onClick={() => setShowServiceModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
             </div>
@@ -347,6 +358,32 @@ export const Registries = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Alíquota ISS (%)</label>
                 <input type="number" step="0.1" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.issAliquot} onChange={e => setServiceForm({...serviceForm, issAliquot: Number(e.target.value)})} />
+              </div>
+
+              <div className="md:col-span-2 pt-2">
+                 <h4 className="font-bold text-xs uppercase text-slate-400 border-b pb-1 mb-3">Retenções Federais (%)</h4>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:col-span-2">
+                 <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">PIS (%)</label>
+                    <input type="number" step="0.01" className="w-full border p-2 rounded" value={serviceForm.pis} onChange={e => setServiceForm({...serviceForm, pis: Number(e.target.value)})} />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">COFINS (%)</label>
+                    <input type="number" step="0.01" className="w-full border p-2 rounded" value={serviceForm.cofins} onChange={e => setServiceForm({...serviceForm, cofins: Number(e.target.value)})} />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">CSLL (%)</label>
+                    <input type="number" step="0.01" className="w-full border p-2 rounded" value={serviceForm.csll} onChange={e => setServiceForm({...serviceForm, csll: Number(e.target.value)})} />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">IR (%)</label>
+                    <input type="number" step="0.01" className="w-full border p-2 rounded" value={serviceForm.ir} onChange={e => setServiceForm({...serviceForm, ir: Number(e.target.value)})} />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">INSS (%)</label>
+                    <input type="number" step="0.01" className="w-full border p-2 rounded" value={serviceForm.inss} onChange={e => setServiceForm({...serviceForm, inss: Number(e.target.value)})} />
+                 </div>
               </div>
 
               <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t mt-2">

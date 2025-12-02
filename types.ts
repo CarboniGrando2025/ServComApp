@@ -54,6 +54,13 @@ export interface Service {
   cnae?: string; // CNAE do serviço
   issAliquot?: number; // Alíquota (%)
   taxCode?: string; // Legacy/Display support
+
+  // Federal Retentions (%)
+  pis?: number;
+  cofins?: number;
+  csll?: number;
+  ir?: number;
+  inss?: number;
 }
 
 export interface BankAccount {
@@ -85,6 +92,11 @@ export interface Sale {
   installmentsCount: number;
   invoiceId?: string;
   bankAccountId?: string; // If PIX/Transfer
+  serviceLocation?: string; // Local da Prestação (Cidade/UF)
+  
+  // Retention Logic
+  retentionAmount?: number; // Total value of retentions
+  deductedRetentions?: boolean; // If true, finalAmount = gross - discount - retentions
 }
 
 export interface Quote {
@@ -164,4 +176,5 @@ export interface CompanySettings {
   specialTaxRegime: string; // Código Regime Especial Tributação (ABRASF)
   incentivadorCultural: boolean;
   optanteSimplesNacional: boolean;
+  nfseWebsite?: string; // URL for manual emission
 }

@@ -44,13 +44,58 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // Mock Data
 const initialClients: Client[] = [
-  { id: 'c1', name: 'Empresa ABC Ltda', document: '12.345.678/0001-90', email: 'contato@abc.com', phone: '(11) 99999-9999', address: 'Av. Paulista, 1000' },
-  { id: 'c2', name: 'João da Silva', document: '123.456.789-00', email: 'joao@gmail.com', phone: '(11) 98888-8888', address: 'Rua das Flores, 123' },
+  { 
+    id: 'c1', 
+    name: 'Empresa ABC Ltda', 
+    document: '12.345.678/0001-90',
+    municipalInscription: '123456', 
+    email: 'contato@abc.com', 
+    phone: '(11) 99999-9999',
+    zipCode: '01310-100',
+    street: 'Av. Paulista',
+    number: '1000',
+    neighborhood: 'Bela Vista',
+    city: 'São Paulo',
+    state: 'SP',
+    cityCode: '3550308'
+  },
+  { 
+    id: 'c2', 
+    name: 'João da Silva', 
+    document: '123.456.789-00', 
+    email: 'joao@gmail.com', 
+    phone: '(11) 98888-8888',
+    zipCode: '85851-000',
+    street: 'Rua das Flores',
+    number: '123',
+    neighborhood: 'Centro',
+    city: 'Foz do Iguaçu',
+    state: 'PR',
+    cityCode: '4108304'
+  },
 ];
 
 const initialServices: Service[] = [
-  { id: 's1', name: 'Consultoria Financeira', price: 1500.00, description: 'Análise de balanço', taxCode: '17.01' },
-  { id: 's2', name: 'Desenvolvimento Web', price: 3000.00, description: 'Criação de site institucional', taxCode: '10.05' },
+  { 
+    id: 's1', 
+    name: 'Consultoria Financeira', 
+    price: 1500.00, 
+    description: 'Análise de balanço e planejamento', 
+    itemLCServico: '17.01',
+    municipalCode: '01234',
+    cnae: '7020-4/00',
+    issAliquot: 2.0
+  },
+  { 
+    id: 's2', 
+    name: 'Desenvolvimento Web', 
+    price: 3000.00, 
+    description: 'Criação de site institucional', 
+    itemLCServico: '01.07',
+    municipalCode: '05678',
+    cnae: '6201-5/00',
+    issAliquot: 3.0
+  },
 ];
 
 const initialBankAccounts: BankAccount[] = [
@@ -100,10 +145,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   financialRecords: [],
   appointments: [],
   settings: {
-    name: 'Minha Empresa de Serviços',
+    name: 'Minha Empresa de Serviços Ltda',
     cnpj: '00.000.000/0001-00',
-    address: 'Rua Exemplo, 100',
-    taxRegime: 'Simples Nacional'
+    municipalInscription: '123456',
+    stateInscription: '',
+    cnae: '6201-5/00',
+    address: {
+      zipCode: '85851-010',
+      street: 'Av. Brasil',
+      number: '100',
+      neighborhood: 'Centro',
+      city: 'Foz do Iguaçu',
+      state: 'PR',
+      cityCode: '4108304'
+    },
+    taxRegime: 'Simples Nacional',
+    specialTaxRegime: '0', // 0 - Sem regime especial
+    optanteSimplesNacional: true,
+    incentivadorCultural: false
   },
 
   addClient: (client) => set((state) => ({ clients: [...state.clients, client] })),

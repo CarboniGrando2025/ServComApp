@@ -18,7 +18,10 @@ export const Registries = () => {
   const [bankForm, setBankForm] = useState<Partial<BankAccount>>({});
 
   const handleOpenClient = (client?: Client) => {
-    setClientForm(client || { name: '', document: '', email: '', phone: '', address: '', notes: '' });
+    setClientForm(client || { 
+        name: '', document: '', email: '', phone: '', notes: '', municipalInscription: '',
+        zipCode: '', street: '', number: '', neighborhood: '', city: '', state: '', cityCode: '' 
+    });
     setShowClientModal(true);
   };
 
@@ -31,15 +34,24 @@ export const Registries = () => {
         document: clientForm.document || '',
         email: clientForm.email || '',
         phone: clientForm.phone || '',
-        address: clientForm.address || '',
-        notes: clientForm.notes || ''
+        notes: clientForm.notes || '',
+        municipalInscription: clientForm.municipalInscription,
+        
+        // Structured Address
+        zipCode: clientForm.zipCode || '',
+        street: clientForm.street || '',
+        number: clientForm.number || '',
+        neighborhood: clientForm.neighborhood || '',
+        city: clientForm.city || '',
+        state: clientForm.state || '',
+        cityCode: clientForm.cityCode || ''
       });
       setShowClientModal(false);
     }
   };
 
   const handleOpenService = (service?: Service) => {
-    setServiceForm(service || { name: '', price: 0, description: '', taxCode: '', cnae: '', issAliquot: 0 });
+    setServiceForm(service || { name: '', price: 0, description: '', itemLCServico: '', municipalCode: '', cnae: '', issAliquot: 0 });
     setShowServiceModal(true);
   };
 
@@ -51,7 +63,8 @@ export const Registries = () => {
         name: serviceForm.name,
         price: Number(serviceForm.price),
         description: serviceForm.description || '',
-        taxCode: serviceForm.taxCode || '',
+        itemLCServico: serviceForm.itemLCServico || '',
+        municipalCode: serviceForm.municipalCode || '',
         cnae: serviceForm.cnae || '',
         issAliquot: Number(serviceForm.issAliquot || 0)
       });
@@ -124,8 +137,8 @@ export const Registries = () => {
                  <tr>
                    <th className="px-6 py-3">Nome</th>
                    <th className="px-6 py-3">CPF/CNPJ</th>
+                   <th className="px-6 py-3">Cidade/UF</th>
                    <th className="px-6 py-3">Contato</th>
-                   <th className="px-6 py-3">Endereço</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -133,13 +146,8 @@ export const Registries = () => {
                    <tr key={c.id} className="hover:bg-slate-50 group cursor-pointer" onClick={() => handleOpenClient(c)}>
                      <td className="px-6 py-4 font-medium text-slate-800">{c.name}</td>
                      <td className="px-6 py-4 text-slate-500">{c.document || '-'}</td>
-                     <td className="px-6 py-4 text-slate-500">
-                       <div className="flex flex-col">
-                         <span>{c.phone}</span>
-                         <span className="text-xs">{c.email}</span>
-                       </div>
-                     </td>
-                     <td className="px-6 py-4 text-slate-500 truncate max-w-xs">{c.address || '-'}</td>
+                     <td className="px-6 py-4 text-slate-500">{c.city}/{c.state}</td>
+                     <td className="px-6 py-4 text-slate-500">{c.phone}</td>
                    </tr>
                  ))}
                  {clients.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">Nenhum cliente cadastrado.</td></tr>}
@@ -165,7 +173,7 @@ export const Registries = () => {
                  <tr>
                    <th className="px-6 py-3">Serviço</th>
                    <th className="px-6 py-3">Preço Base</th>
-                   <th className="px-6 py-3">Cód. Tributação</th>
+                   <th className="px-6 py-3">Item Lista (LC 116)</th>
                    <th className="px-6 py-3">Alíq. ISS</th>
                  </tr>
                </thead>
@@ -174,7 +182,7 @@ export const Registries = () => {
                    <tr key={s.id} className="hover:bg-slate-50 group cursor-pointer" onClick={() => handleOpenService(s)}>
                      <td className="px-6 py-4 font-medium text-slate-800">{s.name}</td>
                      <td className="px-6 py-4 text-slate-700 font-semibold">R$ {s.price.toFixed(2)}</td>
-                     <td className="px-6 py-4 text-slate-500">{s.taxCode || '-'}</td>
+                     <td className="px-6 py-4 text-slate-500">{s.itemLCServico || '-'}</td>
                      <td className="px-6 py-4 text-slate-500">{s.issAliquot ? `${s.issAliquot}%` : '-'}</td>
                    </tr>
                  ))}
@@ -219,36 +227,77 @@ export const Registries = () => {
       {/* CLIENT MODAL */}
       {showClientModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b bg-slate-50">
-              <h3 className="font-bold text-slate-800">Cadastro de Cliente</h3>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b bg-slate-50 sticky top-0 z-10">
+              <h3 className="font-bold text-slate-800">Cadastro de Cliente (Completo para NFSe)</h3>
               <button onClick={() => setShowClientModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
             </div>
-            <form onSubmit={handleSaveClient} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={handleSaveClient} className="p-6 space-y-6">
+              
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo / Razão Social</label>
+                    <input required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">CPF / CNPJ</label>
+                    <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.document} onChange={e => setClientForm({...clientForm, document: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Inscrição Municipal (Opcional)</label>
+                    <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.municipalInscription} onChange={e => setClientForm({...clientForm, municipalInscription: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Telefone / WhatsApp</label>
+                    <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">E-mail (Para envio da NF)</label>
+                    <input type="email" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
+                  </div>
+              </div>
+
+              {/* Address */}
+              <div className="bg-slate-50 p-4 rounded border border-slate-200">
+                 <h4 className="text-sm font-bold text-slate-500 uppercase mb-3">Endereço (Obrigatório para XML)</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">CEP</label>
+                        <input className="w-full border p-2 rounded bg-white" value={clientForm.zipCode} onChange={e => setClientForm({...clientForm, zipCode: e.target.value})} />
+                     </div>
+                     <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Logradouro (Rua/Av)</label>
+                        <input className="w-full border p-2 rounded bg-white" value={clientForm.street} onChange={e => setClientForm({...clientForm, street: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Número</label>
+                        <input className="w-full border p-2 rounded bg-white" value={clientForm.number} onChange={e => setClientForm({...clientForm, number: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Bairro</label>
+                        <input className="w-full border p-2 rounded bg-white" value={clientForm.neighborhood} onChange={e => setClientForm({...clientForm, neighborhood: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
+                        <input className="w-full border p-2 rounded bg-white" value={clientForm.city} onChange={e => setClientForm({...clientForm, city: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">UF</label>
+                        <input className="w-full border p-2 rounded bg-white" maxLength={2} value={clientForm.state} onChange={e => setClientForm({...clientForm, state: e.target.value})} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Cód. IBGE Cidade</label>
+                        <input className="w-full border p-2 rounded bg-white" value={clientForm.cityCode} onChange={e => setClientForm({...clientForm, cityCode: e.target.value})} placeholder="7 dígitos" />
+                     </div>
+                 </div>
+              </div>
+
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo / Razão Social</label>
-                <input required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value})} />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Observações Internas</label>
+                <textarea className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" rows={2} value={clientForm.notes} onChange={e => setClientForm({...clientForm, notes: e.target.value})} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">CPF / CNPJ</label>
-                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.document} onChange={e => setClientForm({...clientForm, document: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Telefone / WhatsApp</label>
-                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
-                <input type="email" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Endereço Completo</label>
-                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={clientForm.address} onChange={e => setClientForm({...clientForm, address: e.target.value})} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-                <textarea className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" rows={3} value={clientForm.notes} onChange={e => setClientForm({...clientForm, notes: e.target.value})} />
-              </div>
+              
               <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t mt-2">
                 <button type="button" onClick={() => setShowClientModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded">Cancelar</button>
                 <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 flex items-center gap-2"><Save size={18}/> Salvar Cliente</button>
@@ -276,20 +325,24 @@ export const Registries = () => {
                 <input type="number" step="0.01" required className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.price} onChange={e => setServiceForm({...serviceForm, price: Number(e.target.value)})} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">CNAE</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">CNAE (Opcional)</label>
                 <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.cnae} onChange={e => setServiceForm({...serviceForm, cnae: e.target.value})} placeholder="Ex: 6201-5/00" />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Descrição Detalhada</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Descrição Detalhada (Vai na Nota)</label>
                 <textarea className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" rows={2} value={serviceForm.description} onChange={e => setServiceForm({...serviceForm, description: e.target.value})} />
               </div>
               
               <div className="md:col-span-2 pt-2">
-                 <h4 className="font-bold text-xs uppercase text-slate-400 border-b pb-1 mb-3">Dados Fiscais (NFS-e)</h4>
+                 <h4 className="font-bold text-xs uppercase text-slate-400 border-b pb-1 mb-3">Dados Fiscais (NFS-e ABRASF)</h4>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cód. Trib. Municipal (LC 116)</label>
-                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.taxCode} onChange={e => setServiceForm({...serviceForm, taxCode: e.target.value})} placeholder="Ex: 14.01" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Item Lista Serviço (LC 116)</label>
+                <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.itemLCServico} onChange={e => setServiceForm({...serviceForm, itemLCServico: e.target.value})} placeholder="Ex: 17.01" />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-slate-700 mb-1">Cód. Trib. Municipal</label>
+                 <input className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500" value={serviceForm.municipalCode} onChange={e => setServiceForm({...serviceForm, municipalCode: e.target.value})} placeholder="Ex: 01234" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Alíquota ISS (%)</label>

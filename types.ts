@@ -26,10 +26,20 @@ export interface Client {
   id: string;
   name: string;
   document: string; // CPF/CNPJ
+  municipalInscription?: string; // Inscrição Municipal (Para PJ)
   email: string;
   phone: string;
-  address: string;
-  notes?: string; // New field
+  notes?: string;
+  
+  // Address Structure for NFSe XML
+  zipCode: string; // CEP
+  street: string; // Logradouro
+  number: string; // Número
+  complement?: string; // Complemento
+  neighborhood: string; // Bairro
+  city: string; // Nome da Cidade
+  state: string; // UF
+  cityCode: string; // Código IBGE (7 dígitos)
 }
 
 export interface Service {
@@ -37,9 +47,13 @@ export interface Service {
   name: string;
   price: number;
   description: string;
-  taxCode: string; // Código de tributação (ABRASF/LC 116)
-  cnae?: string; // New field
-  issAliquot?: number; // New field
+  
+  // Fiscal Data
+  itemLCServico: string; // Código da LC 116/03 (Ex: 17.01)
+  municipalCode?: string; // Código do serviço no município (Ex: 01234)
+  cnae?: string; // CNAE do serviço
+  issAliquot?: number; // Alíquota (%)
+  taxCode?: string; // Legacy/Display support
 }
 
 export interface BankAccount {
@@ -133,6 +147,21 @@ export interface Appointment {
 export interface CompanySettings {
   name: string;
   cnpj: string;
-  address: string;
-  taxRegime: string;
+  municipalInscription: string;
+  stateInscription?: string;
+  cnae: string;
+  address: {
+    zipCode: string;
+    street: string;
+    number: string;
+    complement?: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    cityCode: string; // IBGE
+  };
+  taxRegime: string; // Simples Nacional, Lucro Presumido, etc.
+  specialTaxRegime: string; // Código Regime Especial Tributação (ABRASF)
+  incentivadorCultural: boolean;
+  optanteSimplesNacional: boolean;
 }
